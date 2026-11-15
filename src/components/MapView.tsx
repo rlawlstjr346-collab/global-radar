@@ -5,6 +5,7 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { COUNTRY_POINTS } from "@/data/countries";
 import type { CountryCode } from "@/data/platforms";
+import { createPinIcon } from "@/lib/mapPinIcon";
 
 const ACCENT = "#FF3C5C";
 
@@ -55,7 +56,7 @@ export default function MapView({ selectedCountry, onSelectCountry }: MapViewPro
 
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: "mapbox://styles/mapbox/light-v11",
+      style: "mapbox://styles/mapbox/streets-v12",
       projection: "mercator",
       center: [20, 25],
       zoom: 1.4,
@@ -72,6 +73,9 @@ export default function MapView({ selectedCountry, onSelectCountry }: MapViewPro
       );
       map.fitBounds(bounds, { padding: 60, duration: 0 });
 
+      map.addImage("pin", createPinIcon(ACCENT));
+      map.addImage("pin-active", createPinIcon("#ffffff", { strokeColor: ACCENT, strokeWidth: 3 }));
+
       map.addSource("countries", { type: "geojson", data: toFeatureCollection(COUNTRY_POINTS) });
       map.addSource("countries-hover", { type: "geojson", data: singleFeature(undefined) });
       map.addSource("countries-active", { type: "geojson", data: singleFeature(undefined) });
@@ -79,36 +83,36 @@ export default function MapView({ selectedCountry, onSelectCountry }: MapViewPro
       map.addLayer({
         id: "countries",
         source: "countries",
-        type: "circle",
-        paint: {
-          "circle-color": ACCENT,
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, 5, 6, 10],
-          "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 2,
+        type: "symbol",
+        layout: {
+          "icon-image": "pin",
+          "icon-anchor": "bottom",
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 1, 0.5, 6, 0.9],
+          "icon-allow-overlap": true,
         },
       });
 
       map.addLayer({
         id: "countries-hover",
         source: "countries-hover",
-        type: "circle",
-        paint: {
-          "circle-color": ACCENT,
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, 8, 6, 14],
-          "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 3,
+        type: "symbol",
+        layout: {
+          "icon-image": "pin",
+          "icon-anchor": "bottom",
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 1, 0.65, 6, 1.1],
+          "icon-allow-overlap": true,
         },
       });
 
       map.addLayer({
         id: "countries-active",
         source: "countries-active",
-        type: "circle",
-        paint: {
-          "circle-color": "#ffffff",
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, 8, 6, 14],
-          "circle-stroke-color": ACCENT,
-          "circle-stroke-width": 3,
+        type: "symbol",
+        layout: {
+          "icon-image": "pin-active",
+          "icon-anchor": "bottom",
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 1, 0.7, 6, 1.2],
+          "icon-allow-overlap": true,
         },
       });
 
@@ -120,7 +124,7 @@ export default function MapView({ selectedCountry, onSelectCountry }: MapViewPro
           "text-field": ["get", "name"],
           "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"],
           "text-size": 13,
-          "text-offset": [0, -1.6],
+          "text-offset": [0, -2.6],
           "text-anchor": "bottom",
         },
         paint: {
