@@ -12,7 +12,7 @@ function parseManualOverride(raw: string | undefined): ManualLocaleOverride | nu
   return { language, country: country as CountryCode };
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const manualOverride = parseManualOverride(
     request.cookies.get(MANUAL_OVERRIDE_COOKIE)?.value,
   );
