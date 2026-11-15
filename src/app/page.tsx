@@ -12,15 +12,15 @@ export default function Home() {
 
   return (
     <div className={styles.page}>
+      <div className={styles.mapArea}>
+        <MapView selectedCountry={selectedCountry} onSelectCountry={setSelectedCountry} />
+      </div>
       <Sidebar
         query={query}
         onQueryChange={setQuery}
         selectedCountry={selectedCountry}
         onSelectCountry={setSelectedCountry}
       />
-      <div className={styles.mapArea}>
-        <MapView selectedCountry={selectedCountry} onSelectCountry={setSelectedCountry} />
-      </div>
     </div>
   );
 }
