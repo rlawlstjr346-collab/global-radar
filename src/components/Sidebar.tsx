@@ -3,6 +3,7 @@
 import { useState, type UIEvent } from "react";
 import { COUNTRY_POINTS, type Continent } from "@/data/countries";
 import { platformsForCountry, type CountryCode } from "@/data/platforms";
+import { normalizeQueryForPlatform } from "@/lib/translateQuery";
 import SegmentedControl from "./SegmentedControl";
 import styles from "./Sidebar.module.css";
 
@@ -104,18 +105,25 @@ export default function Sidebar({
           {selectedCountry && (
             <>
               <div className={styles.sectionLabel}>Marketplaces</div>
-              {platforms.map((platform) => (
-                <a
-                  key={platform.id}
-                  className={styles.row}
-                  href={platform.buildSearchUrl(query || "")}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <span>{platform.name}</span>
-                  {!platform.verified && <span className={styles.unverifiedBadge}>needs check</span>}
-                </a>
-              ))}
+              {platforms.map((platform) => {
+                const normalized = normalizeQueryForPlatform(query, platform.country);
+                const hint = normalized && normalized !== query.trim() ? normalized : null;
+                return (
+                  <a
+                    key={platform.id}
+                    className={`${styles.row} ${styles.rowMarketplace}`}
+                    href={platform.buildSearchUrl(normalized || "")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <span className={styles.marketplaceInfo}>
+                      <span>{platform.name}</span>
+                      {hint && <span className={styles.queryHint}>searches &quot;{hint}&quot;</span>}
+                    </span>
+                    {!platform.verified && <span className={styles.unverifiedBadge}>needs check</span>}
+                  </a>
+                );
+              })}
             </>
           )}
 

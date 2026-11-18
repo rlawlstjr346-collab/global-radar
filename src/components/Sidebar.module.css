@@ -170,6 +170,25 @@
   font-weight: 600;
 }
 
+.rowMarketplace {
+  height: auto;
+  min-height: 40px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.marketplaceInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.queryHint {
+  font-size: 11px;
+  font-weight: 400;
+  color: #888888;
+}
+
 .unverifiedBadge {
   font-size: 11px;
   color: #888888;
