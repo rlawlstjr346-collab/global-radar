@@ -34,15 +34,23 @@ npm run dev
 
 See `src/data/platforms.ts`. Korea (Bunjang, Karrot, Joonggonara, Fruits Family), Japan (Mercari, Yahoo!
 Auctions), US (eBay, Facebook Marketplace, Craigslist), India (OLX India, Quikr), Indonesia (OLX Indonesia),
-UK/Germany/France (eBay, Vinted). Most entries are marked `verified: false` — the URL patterns are
-best-effort from public docs/observation and need a manual click-through check before this goes live. `eBay`
-and `Craigslist` are marked verified (same pattern RADAR already runs in production).
+UK/Germany/France (eBay, Vinted).
+
+Curl-checked every URL on 2026-11-18 (see each entry's `notes` for the exact finding):
+
+- **Verified**: eBay (US/UK/DE), Craigslist, Mercari, Yahoo! Auctions, Vinted (FR/DE)
+- **Confirmed broken, needs a fix**: Fruits Family (its search path 404s), Joonggonara (the URL pattern
+  doesn't look like it actually filters)
+- **Couldn't check from this environment**: OLX India/Indonesia (connections time out from this network
+  specifically), Facebook Marketplace (400, likely needs a logged-in session), Quikr (403), Bunjang/Karrot
+  (200 but client-rendered, so curl can't see whether real results loaded)
 
 ## Known gaps / open questions
 
 - **Not pushed to GitHub.** This only exists in this container so far — ask for a repo name/location before
   the container gets recycled.
-- Unverified platform URLs (see above) — needs a manual pass clicking through each one.
+- The "couldn't check" platforms above need a real browser pass, ideally from a residential network for the
+  ones that time out here.
 - No real store/listing data of our own; we only redirect to each platform's own search. The
   lavintagemap.com `/store/<slug>` detail-page design (address, hours, description) doesn't apply here for
   that reason — we don't host individual listings.
