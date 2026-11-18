@@ -47,7 +47,8 @@ export const PLATFORMS: Platform[] = [
     buildSearchUrl: (q) =>
       `https://m.bunjang.co.kr/search/products?order=date&q=${enc(q)}`,
     verified: false,
-    notes: "Pattern from public docs/observation; confirm result page still matches after any site redesign.",
+    notes:
+      "curl check (2026-11-18): URL resolves (200) but it's a client-rendered SPA shell (~7KB, no listings in the HTML) — couldn't confirm the actual search results without a real browser.",
   },
   {
     id: "daangn",
@@ -58,7 +59,7 @@ export const PLATFORMS: Platform[] = [
     buildSearchUrl: (q) => `https://www.daangn.com/search/${enc(q)}`,
     verified: false,
     notes:
-      "Danggeun's web search is location-scoped and may require a neighborhood context to return results — needs manual verification.",
+      "curl check (2026-11-18): URL resolves (200, ~850KB). Still unconfirmed whether it returns real results without a neighborhood/location context set — needs a real-browser check.",
   },
   {
     id: "joonggonara",
@@ -72,7 +73,7 @@ export const PLATFORMS: Platform[] = [
       )}`,
     verified: false,
     notes:
-      "Hosted on a Naver Cafe; URL shape is fragile and should be re-derived by hand before launch.",
+      "curl check (2026-11-18): URL resolves (200, ~876KB) but no search-result markers found in the HTML — the iframe_url param looks like a legacy client-side pattern that doesn't actually filter server-side. Likely just lands on the cafe home page. Needs a different approach, not just a manual re-check.",
   },
   {
     id: "fruitsfamily",
@@ -82,7 +83,8 @@ export const PLATFORMS: Platform[] = [
     homepage: "https://www.fruitsfamily.com",
     buildSearchUrl: (q) => `https://www.fruitsfamily.com/goods/search?keyword=${enc(q)}`,
     verified: false,
-    notes: "Camera/lens-focused marketplace; search URL unconfirmed — TODO manual check.",
+    notes:
+      "curl check (2026-11-18): this exact path 404s. Homepage (200) didn't reveal the real search path via a quick scan — needs a manual look at the site to find the correct URL.",
   },
 
   // ---- Japan ----
@@ -92,8 +94,8 @@ export const PLATFORMS: Platform[] = [
     country: "JP",
     homepage: "https://jp.mercari.com",
     buildSearchUrl: (q) => `https://jp.mercari.com/search?keyword=${enc(q)}`,
-    verified: false,
-    notes: "Standard Mercari search param; low risk but not yet manually re-confirmed in this project.",
+    verified: true,
+    notes: "curl check (2026-11-18): 200, ~555KB of real listing content for the query.",
   },
   {
     id: "yahoo-auctions-jp",
@@ -102,7 +104,8 @@ export const PLATFORMS: Platform[] = [
     country: "JP",
     homepage: "https://auctions.yahoo.co.jp",
     buildSearchUrl: (q) => `https://auctions.yahoo.co.jp/search/search?p=${enc(q)}`,
-    verified: false,
+    verified: true,
+    notes: "curl check (2026-11-18): 200, ~483KB of real listing content for the query.",
   },
 
   // ---- United States ----
@@ -113,7 +116,8 @@ export const PLATFORMS: Platform[] = [
     homepage: "https://www.ebay.com",
     buildSearchUrl: (q) => `https://www.ebay.com/sch/i.html?_nkw=${enc(q)}`,
     verified: true,
-    notes: "Same pattern RADAR already uses in production.",
+    notes:
+      "Same pattern RADAR already uses in production. curl check (2026-11-18) got 403 here, but that's eBay's bot protection blocking a scripted/datacenter request, not the URL pattern being wrong — real browser traffic (RADAR) already confirms it works.",
   },
   {
     id: "facebook-marketplace-us",
@@ -122,7 +126,8 @@ export const PLATFORMS: Platform[] = [
     homepage: "https://www.facebook.com/marketplace",
     buildSearchUrl: (q) => `https://www.facebook.com/marketplace/search/?query=${enc(q)}`,
     verified: false,
-    notes: "Marketplace search generally requires a logged-in Facebook session — confirm logged-out behavior.",
+    notes:
+      "curl check (2026-11-18): 400 Bad Request. Marketplace search generally requires a logged-in Facebook session too — needs a real logged-in-browser check, not just a URL fix.",
   },
   {
     id: "craigslist-us",
@@ -135,7 +140,7 @@ export const PLATFORMS: Platform[] = [
     },
     verified: true,
     notes:
-      "Craigslist is subdomain-per-city; `opts.city` must be resolved from the user's selected region before building the link. Defaults to newyork.",
+      "Craigslist is subdomain-per-city; `opts.city` must be resolved from the user's selected region before building the link. Defaults to newyork. curl check (2026-11-18): 200, ~138KB of real listing content.",
   },
 
   // ---- India ----
@@ -146,6 +151,8 @@ export const PLATFORMS: Platform[] = [
     homepage: "https://www.olx.in",
     buildSearchUrl: (q) => `https://www.olx.in/items/q-${enc(q)}`,
     verified: false,
+    notes:
+      "curl check (2026-11-18): connection to olx.in timed out repeatedly from this environment (proxy tunnel opened fine, origin never responded) — likely blocks this network's egress IP range. Needs checking from a different network/real browser.",
   },
   {
     id: "quikr-in",
@@ -154,7 +161,8 @@ export const PLATFORMS: Platform[] = [
     homepage: "https://www.quikr.com",
     buildSearchUrl: (q) => `https://www.quikr.com/${enc(q)}`,
     verified: false,
-    notes: "Quikr's URL shape varies by category; generic query path needs manual confirmation.",
+    notes:
+      "Quikr's URL shape varies by category; generic query path needs manual confirmation. curl check (2026-11-18): 403 (bot-blocked or wrong path, can't tell which from this signal alone).",
   },
 
   // ---- Indonesia ----
@@ -165,6 +173,8 @@ export const PLATFORMS: Platform[] = [
     homepage: "https://www.olx.co.id",
     buildSearchUrl: (q) => `https://www.olx.co.id/search?q=${enc(q)}`,
     verified: false,
+    notes:
+      "curl check (2026-11-18): same timeout behavior as olx.in — likely the same network-level block, not necessarily a wrong URL pattern.",
   },
 
   // ---- Europe (per-market domains; see notes) ----
@@ -175,7 +185,8 @@ export const PLATFORMS: Platform[] = [
     homepage: "https://www.ebay.co.uk",
     buildSearchUrl: (q) => `https://www.ebay.co.uk/sch/i.html?_nkw=${enc(q)}`,
     verified: true,
-    notes: "Same tested eBay pattern, UK domain.",
+    notes:
+      "Same tested eBay pattern, UK domain. curl check (2026-11-18): 403, same bot-protection signal as the US domain — not a sign the pattern is wrong.",
   },
   {
     id: "ebay-de",
@@ -184,6 +195,7 @@ export const PLATFORMS: Platform[] = [
     homepage: "https://www.ebay.de",
     buildSearchUrl: (q) => `https://www.ebay.de/sch/i.html?_nkw=${enc(q)}`,
     verified: true,
+    notes: "curl check (2026-11-18): 403, same bot-protection signal as the other eBay domains.",
   },
   {
     id: "vinted-fr",
@@ -191,8 +203,9 @@ export const PLATFORMS: Platform[] = [
     country: "FR",
     homepage: "https://www.vinted.fr",
     buildSearchUrl: (q) => `https://www.vinted.fr/catalog?search_text=${enc(q)}`,
-    verified: false,
-    notes: "Vinted runs one domain per country with no cross-domain search; needs a domain per target market.",
+    verified: true,
+    notes:
+      "Vinted runs one domain per country with no cross-domain search; needs a domain per target market. curl check (2026-11-18): 200, ~3.76MB of real listing content for the query.",
   },
   {
     id: "vinted-de",
@@ -200,7 +213,8 @@ export const PLATFORMS: Platform[] = [
     country: "DE",
     homepage: "https://www.vinted.de",
     buildSearchUrl: (q) => `https://www.vinted.de/catalog?search_text=${enc(q)}`,
-    verified: false,
+    verified: true,
+    notes: "curl check (2026-11-18): 200, ~3.73MB of real listing content for the query.",
   },
 ];
 
