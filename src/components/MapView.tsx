@@ -64,7 +64,9 @@ export default function MapView({ selectedCountry, onSelectCountry }: MapViewPro
     });
     mapRef.current = map;
 
-    map.addControl(new mapboxgl.NavigationControl(), "top-right");
+    // bottom-right, not top-right: on narrow viewports the sidebar overlay
+    // covers the top of the screen, so top-right controls would be hidden.
+    map.addControl(new mapboxgl.NavigationControl(), "bottom-right");
 
     map.on("load", () => {
       const bounds = COUNTRY_POINTS.reduce(

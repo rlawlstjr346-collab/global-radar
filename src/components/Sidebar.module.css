@@ -197,3 +197,40 @@
 .footer {
   padding: 16px 20px;
 }
+
+@media (max-width: 768px) {
+  .wrapper {
+    width: 100%;
+    height: 60vh;
+  }
+
+  .shadow {
+    left: 0;
+    top: 60vh;
+    width: 100%;
+    height: 32px;
+    background: linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.08) 0%,
+      rgba(0, 0, 0, 0.01) 60%,
+      rgba(0, 0, 0, 0) 100%
+    );
+  }
+
+  .header {
+    padding: 20px 16px 0;
+  }
+
+  .search,
+  .tabs {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .row,
+  .sectionLabel,
+  .continentHeading {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
