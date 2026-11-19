@@ -9,6 +9,11 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
+  verification: {
+    other: {
+      "naver-site-verification": "bcaffdcaad9c5e3d64a84c341a0d9b14a71b679b",
+    },
+  },
 };
 
 // <html lang> depends on the `x-locale` header proxy.ts sets per request

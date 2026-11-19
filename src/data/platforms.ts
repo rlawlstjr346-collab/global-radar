@@ -144,9 +144,9 @@ export const PLATFORMS: Platform[] = [
     homepage: "https://m.bunjang.co.kr",
     buildSearchUrl: (q) =>
       `https://m.bunjang.co.kr/search/products?order=date&q=${enc(q)}`,
-    verified: false,
+    verified: true,
     notes:
-      "curl check (2026-11-18): URL resolves (200) but it's a client-rendered SPA shell (~7KB, no listings in the HTML) — couldn't confirm the actual search results without a real browser.",
+      "Real-browser check (2026-11-19): real listings with prices (e.g. 닥터마틴 로니 힐 첼시 부츠, 49,000원).",
   },
   {
     id: "daangn",
@@ -247,17 +247,7 @@ export const PLATFORMS: Platform[] = [
     buildSearchUrl: (q) => `https://www.olx.in/items/q-${enc(q)}`,
     verified: false,
     notes:
-      "curl check (2026-11-18): connection to olx.in timed out repeatedly from this environment (proxy tunnel opened fine, origin never responded) — likely blocks this network's egress IP range. Needs checking from a different network/real browser.",
-  },
-  {
-    id: "quikr-in",
-    name: "Quikr",
-    country: "IN",
-    homepage: "https://www.quikr.com",
-    buildSearchUrl: (q) => `https://www.quikr.com/?query=${enc(q)}`,
-    verified: false,
-    notes:
-      "curl check (2026-11-19): the old bare /${query} path's own canonical tag pointed to /404Error — confirmed wrong. Fixed to match the homepage's actual search form (`<input name=\"query\">`, method GET, no action = submits to itself), but the form is JS-driven — curl gets the same bytes as the homepage either way, so this still needs a real-browser check to confirm it actually filters.",
+      "Likely foreign-access restricted, not a URL problem: real-browser check (2026-11-19) got \"Access Denied\" (Akamai edge block, reference #18.a6023517...) on the bare homepage itself — confirmed independently from two different networks/countries, not just this automation. OLX India appears to reject non-Indian traffic at the edge. May work fine for users actually browsing from India.",
   },
 
   // ---- Indonesia ----
@@ -322,9 +312,9 @@ export const PLATFORMS: Platform[] = [
     country: "CN",
     homepage: "https://www.goofish.com",
     buildSearchUrl: (q) => `https://www.goofish.com/search?q=${enc(q)}`,
-    verified: false,
+    verified: true,
     notes:
-      "curl + WebFetch check (2026-11-18): 200, ~11KB — client-rendered SPA shell (header, nav, category links) with zero listing cards for 'iphone'. Couldn't confirm real search results without a JS-executing browser.",
+      "Real-browser check (2026-11-19): the URL pattern is correct and renders results (confirmed with a Chinese query, title \"鞋子_闲鱼\" / results loading). The earlier \"no results\" read was just an English test query on a Chinese-only platform, not a broken URL — this one only returns results for Chinese-language search terms, same as any other non-English-market site.",
   },
 
   // ---- Taiwan ----
@@ -400,9 +390,9 @@ export const PLATFORMS: Platform[] = [
     country: "TH",
     homepage: "https://www.kaidee.com",
     buildSearchUrl: (q) => `https://www.kaidee.com/search?q=${enc(q)}`,
-    verified: false,
+    verified: true,
     notes:
-      "curl + WebFetch check (2026-11-18): 200 but ~8KB client-rendered SPA shell, no listing cards for 'iphone'. Carousell does not operate in Thailand (carousell.co.th / th.carousell.com don't resolve), so Kaidee is the best-known general secondhand option found.",
+      "Real-browser check (2026-11-19): real listings render with prices (e.g. Adidas Running Shoes, ฿143).",
   },
 
   // ---- Vietnam ----
@@ -466,18 +456,6 @@ export const PLATFORMS: Platform[] = [
       "curl check (2026-11-18): 200, ~808KB, confirmed real search-result markup — multiple price fields and 269 occurrences of the query term.",
   },
 
-  // ---- United Arab Emirates ----
-  {
-    id: "dubizzle-ae",
-    name: "Dubizzle",
-    country: "AE",
-    homepage: "https://www.dubizzle.com",
-    buildSearchUrl: (q) => `https://www.dubizzle.com/en/search/?q=${enc(q)}`,
-    verified: false,
-    notes:
-      "curl check (2026-11-18): 200 but Imperva's 'Pardon Our Interruption' bot-challenge shell on both homepage and search path — whole domain behind bot protection from this network, not a wrong URL.",
-  },
-
   // ---- Saudi Arabia ----
   {
     id: "haraj-sa",
@@ -500,7 +478,7 @@ export const PLATFORMS: Platform[] = [
     buildSearchUrl: (q) => `https://www.sahibinden.com/kelime-ile-arama?query_text=${enc(q)}`,
     verified: false,
     notes:
-      "Sahibinden is Turkey's dominant classifieds/marketplace platform (general keyword-search path confirmed via public docs). curl check (2026-11-18): 403, Cloudflare JS challenge — bot-blocked, not a URL problem.",
+      "Sahibinden is Turkey's dominant classifieds/marketplace platform (general keyword-search path confirmed via public docs). Confirmed foreign-access restricted, not a URL problem: real-browser check (2026-11-19) showed an explicit message — \"You need to sign in to access sahibinden.com from outside Turkey.\" This is the clearest confirmed case of the pattern: works fine for users actually in Turkey, geo-gated behind login everywhere else.",
   },
 
   // ---- Israel ----
@@ -513,7 +491,7 @@ export const PLATFORMS: Platform[] = [
     buildSearchUrl: (q) => `https://www.yad2.co.il/products/all?txt=${enc(q)}`,
     verified: false,
     notes:
-      "Yad2 is Israel's dominant classifieds site; its secondhand-goods vertical is under /products/{category} with a free-text 'txt' param. curl check (2026-11-18): 403 Forbidden, Akamai-style block page — bot-blocked, not a URL problem.",
+      "Yad2 is Israel's dominant classifieds site; its secondhand-goods vertical is under /products/{category} with a free-text 'txt' param. Likely foreign-access restricted, not a URL problem: real-browser check (2026-11-19) got a plain \"403 Forbidden\" (Akamai-style, with a transaction ID) on the bare homepage itself — confirmed independently from two different networks/countries. Yad2 appears to reject non-Israeli traffic at the edge. May work fine for users actually browsing from Israel.",
   },
 
   // ---- Qatar ----
@@ -544,9 +522,9 @@ export const PLATFORMS: Platform[] = [
     country: "ES",
     homepage: "https://es.wallapop.com",
     buildSearchUrl: (q) => `https://es.wallapop.com/search?keywords=${enc(q)}`,
-    verified: false,
+    verified: true,
     notes:
-      "curl check (2026-11-18): 200 but only ~78KB — client-rendered Next.js SPA shell, results load client-side via API after render. Couldn't confirm without a real browser.",
+      "Real-browser check (2026-11-19): real listings with titles/prices, e.g. \"Zapatillas Nike Air TN...\" 60€.",
   },
 
   // ---- Italy ----
@@ -628,8 +606,8 @@ export const PLATFORMS: Platform[] = [
     country: "CH",
     homepage: "https://www.ricardo.ch",
     buildSearchUrl: (q) => `https://www.ricardo.ch/de/s/${enc(q)}`,
-    verified: false,
-    notes: "curl check (2026-11-18): 403, response <title> is literally 'Ricardo Captcha' — confirmed bot-protection block.",
+    verified: true,
+    notes: "Real-browser check (2026-11-19): 158,672 results for the query; real listings with prices, e.g. \"Nike Air Force 1 MID 44\" CHF 99.",
   },
 
   // ---- Austria ----
@@ -649,8 +627,8 @@ export const PLATFORMS: Platform[] = [
     homepage: "https://www.willhaben.at",
     buildSearchUrl: (q) =>
       `https://www.willhaben.at/iad/kaufen-und-verkaufen/marktplatz?keyword=${enc(q)}`,
-    verified: false,
-    notes: "curl check (2026-11-18): 403 on both search path and homepage — whole-site bot protection.",
+    verified: true,
+    notes: "Real-browser check (2026-11-19): 4,687 Anzeigen with shoe-specific filters (Schuhgröße); real listings e.g. \"Damen Stiefletten Gr.41\" €25.",
   },
 
   // ---- Portugal ----
@@ -986,8 +964,8 @@ export const PLATFORMS: Platform[] = [
     country: "AU",
     homepage: "https://www.gumtree.com.au",
     buildSearchUrl: (q) => `https://www.gumtree.com.au/s-${enc(q)}/k0`,
-    verified: false,
-    notes: "curl check (2026-11-18): 403, a JS 'Browser Challenge' page — bot-blocked. The /s-{query}/k0 path is well-documented for Gumtree AU.",
+    verified: true,
+    notes: "Real-browser check (2026-11-19): real listings with prices, e.g. \"Nike, Adidas, ASIC sports shoes new\" $85.",
   },
 
   // ---- New Zealand ----
@@ -997,9 +975,9 @@ export const PLATFORMS: Platform[] = [
     country: "NZ",
     homepage: "https://www.trademe.co.nz",
     buildSearchUrl: (q) => `https://www.trademe.co.nz/a/marketplace/search?search_string=${enc(q)}`,
-    verified: false,
+    verified: true,
     notes:
-      "Trade Me is NZ's dominant auction/classifieds site, no real competitor. curl check (2026-11-18): every URL on this domain returned 406 Not Acceptable — looks like a network/WAF-level block on this environment, not evidence the URL itself is wrong.",
+      "Real-browser check (2026-11-19): 83,536 results for the query with a category breakdown.",
   },
 
   // ======== Second expansion round (researched 2026-11-18) ========
@@ -1031,9 +1009,9 @@ export const PLATFORMS: Platform[] = [
     country: "HR",
     homepage: "https://www.njuskalo.hr",
     buildSearchUrl: (q) => `https://www.njuskalo.hr/search/?keywords=${enc(q)}`,
-    verified: false,
+    verified: true,
     notes:
-      "Param confirmed from the live search form's own HTML. curl check (2026-11-18): /search/ is redirected every time to a Radware/Perimeterx bot-challenge — confirmed bot-blocked, not a wrong pattern.",
+      "Real-browser check (2026-11-19): 874 oglasa (results) with real titles/prices.",
   },
   {
     id: "vinted-hr",
@@ -1118,16 +1096,6 @@ export const PLATFORMS: Platform[] = [
     notes:
       "curl check (2026-11-18): persistent 503 'Service Temporarily Unavailable' on repeated attempts — not evidence the pattern is wrong. No Vinted domain exists for Serbia.",
   },
-  {
-    id: "kupujemprodajem-rs",
-    name: "KupujemProdajem",
-    country: "RS",
-    homepage: "https://www.kupujemprodajem.com",
-    buildSearchUrl: (q) => `https://www.kupujemprodajem.com/pretraga.php?keywords=${enc(q)}`,
-    verified: false,
-    notes:
-      "Serbia's own long-standing dominant classifieds brand (predates OLX's entry). curl check (2026-11-18): 403 on homepage and search path — bot-blocked.",
-  },
 
   // ---- Lithuania ----
   {
@@ -1161,16 +1129,6 @@ export const PLATFORMS: Platform[] = [
     verified: true,
     notes: "curl check (2026-11-18): 200, ~3.73MB, 1081 occurrences of 'iphone' — real listing content.",
   },
-  {
-    id: "ss-lv",
-    name: "SS.com",
-    country: "LV",
-    homepage: "https://www.ss.com",
-    buildSearchUrl: (q) => `https://www.ss.com/en/search/?q=${enc(q)}`,
-    verified: false,
-    notes:
-      "Latvia's long-running dominant classifieds site. curl check (2026-11-18): 200 but only ~12KB — legacy client-side JS renders the real list, no real markup in raw HTML.",
-  },
 
   // ---- Estonia ----
   {
@@ -1189,10 +1147,10 @@ export const PLATFORMS: Platform[] = [
     name: "Osta.ee",
     country: "EE",
     homepage: "https://www.osta.ee",
-    buildSearchUrl: (q) => `https://www.osta.ee/otsing?q=${enc(q)}`,
-    verified: false,
+    buildSearchUrl: (q) => `https://www.osta.ee/?fuseaction=search.search&q%5Bq%5D=${enc(q)}`,
+    verified: true,
     notes:
-      "curl + WebFetch check (2026-11-18): every path returns 403 with an Estonian bot-detection page — couldn't even view a real page to confirm the URL shape. Unconfirmed guess.",
+      "Real-browser check (2026-11-19): inspected the actual search form (name=\"q[q]\", GET, action=/?fuseaction=search.search) — the old /otsing?q= guess was wrong. Confirmed working: query-specific title and real listings.",
   },
 
   // ---- Iceland ----
@@ -1258,9 +1216,9 @@ export const PLATFORMS: Platform[] = [
     country: "LB",
     homepage: "https://www.olx.com.lb/en/",
     buildSearchUrl: (q) => `https://www.olx.com.lb/en/ads/q-${enc(q)}/`,
-    verified: false,
+    verified: true,
     notes:
-      "Formerly 'Dubizzle Lebanon' — dubizzle.com.lb now 301-redirects here (brand rebrand). curl check (2026-11-18): 202 Accepted with 0 bytes — soft bot-block, not a wrong path.",
+      "Real-browser check (2026-11-19): real listing present (Birkenstock Sandals, USD 250).",
   },
 
   // ---- Kuwait ----
@@ -1361,17 +1319,6 @@ export const PLATFORMS: Platform[] = [
       "Georgia's largest general new/secondhand marketplace (ss.ge has drifted toward mainly real-estate/cars). curl check (2026-11-18): 200, ~207KB, embedded JSON confirms a real product match for 'iphone'.",
   },
 
-  // ---- Armenia ----
-  {
-    id: "list-am",
-    name: "List.am",
-    country: "AM",
-    homepage: "https://www.list.am",
-    buildSearchUrl: (q) => `https://www.list.am/en/search?q=${enc(q)}`,
-    verified: false,
-    notes: "Armenia's largest general classifieds site. curl check (2026-11-18): 403 Cloudflare challenge on homepage and search URL.",
-  },
-
   // ---- Nepal ----
   {
     id: "hamrobazaar-np",
@@ -1379,9 +1326,9 @@ export const PLATFORMS: Platform[] = [
     country: "NP",
     homepage: "https://hamrobazaar.com",
     buildSearchUrl: (q) => `https://hamrobazaar.com/search/product?q=${enc(q)}`,
-    verified: false,
+    verified: true,
     notes:
-      "Nepal's largest general secondhand/new marketplace. curl check (2026-11-18): 200, ~511KB, but results load client-side via API — no confirmed real results in raw HTML.",
+      "Real-browser check (2026-11-19): 218 results with real listings (e.g. Adidas Swift Run, ₨15,000) once client-side rendering finished.",
   },
 
   // ---- Myanmar ----
@@ -1484,9 +1431,9 @@ export const PLATFORMS: Platform[] = [
     country: "DZ",
     homepage: "https://www.ouedkniss.com",
     buildSearchUrl: (q) => `https://www.ouedkniss.com/s/?keywords=${enc(q)}&lang=en`,
-    verified: false,
+    verified: true,
     notes:
-      "Algeria's dominant classifieds/secondhand marketplace by far (1M+ consultations/day). curl check (2026-11-18): 200 but fully client-rendered Vue/Nuxt SPA — no real search results in raw HTML.",
+      "Real-browser check (2026-11-19): real listing cards with photos/store names (216 products in the matched category facet).",
   },
 
   // ---- Tunisia ----
