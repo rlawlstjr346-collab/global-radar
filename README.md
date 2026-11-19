@@ -15,6 +15,15 @@ npm run dev
 
 `.env.local` needs `NEXT_PUBLIC_MAPBOX_TOKEN` (not committed — ask for the token).
 
+Optional: `NEXT_PUBLIC_GA_MEASUREMENT_ID` turns on Google Analytics (page views
+per locale/country, plus a `platform_click` event per outbound platform link).
+Unset in local dev — nothing loads, nothing errors. For EU visitors, GA only
+loads after they accept the cookie-consent banner (see `ConsentManager.tsx`).
+
+`NEXT_PUBLIC_SITE_URL` (default `http://localhost:3000`) is the canonical
+domain used by the sitemap, robots.txt, and OG/metadata links — set to
+`https://worldsecondhandmarket.com` in production.
+
 ## What's built
 
 - World map (Mapbox GL, `mapbox://styles/mapbox/streets-v12`) with a pin per supported country. Click a pin

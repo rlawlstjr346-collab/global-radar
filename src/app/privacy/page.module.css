@@ -1,0 +1,57 @@
+.wrapper {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 48px 24px 80px;
+  font-size: 15px;
+  line-height: 1.7;
+  color: #222222;
+}
+
+.back {
+  display: inline-block;
+  margin-bottom: 24px;
+  color: #ff3c5c;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.back:hover {
+  text-decoration: underline;
+}
+
+.title {
+  font-size: 26px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.updated {
+  font-size: 13px;
+  color: #888888;
+  margin: 0 0 32px;
+}
+
+.section {
+  margin: 28px 0;
+}
+
+.heading {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: #171717;
+}
+
+.section p,
+.section li {
+  margin: 0 0 10px;
+}
+
+.section ul {
+  padding-inline-start: 20px;
+}
+
+.section a {
+  color: #ff3c5c;
+}

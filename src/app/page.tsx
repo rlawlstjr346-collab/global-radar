@@ -1,26 +1,19 @@
-"use client";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { pickPreferredLanguage } from "@/lib/i18n/detect";
+import { getGeoCountry } from "@/lib/i18n/geo";
 
-import { useState } from "react";
-import MapView from "@/components/MapView";
-import Sidebar from "@/components/Sidebar";
-import type { CountryCode } from "@/data/platforms";
-import styles from "./page.module.css";
+// Safety net only — proxy.ts already redirects "/" before this ever
+// renders in normal operation. Kept in case a request reaches here anyway
+// (e.g. a matcher miss), so "/" never 404s.
+export const instant = false;
 
-export default function Home() {
-  const [query, setQuery] = useState("");
-  const [selectedCountry, setSelectedCountry] = useState<CountryCode | null>(null);
+export default async function RootFallback() {
+  const hdrs = await headers();
+  const language = pickPreferredLanguage({
+    acceptLanguageHeader: hdrs.get("accept-language"),
+    geoCountry: getGeoCountry({ headers: hdrs }),
+  });
 
-  return (
-    <div className={styles.page}>
-      <div className={styles.mapArea}>
-        <MapView selectedCountry={selectedCountry} onSelectCountry={setSelectedCountry} />
-      </div>
-      <Sidebar
-        query={query}
-        onQueryChange={setQuery}
-        selectedCountry={selectedCountry}
-        onSelectCountry={setSelectedCountry}
-      />
-    </div>
-  );
+  redirect(`/${language}`);
 }

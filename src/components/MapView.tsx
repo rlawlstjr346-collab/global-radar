@@ -3,8 +3,11 @@
 import { useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
+import MapControls from "./MapControls";
 import { COUNTRY_POINTS } from "@/data/countries";
 import type { CountryCode } from "@/data/platforms";
+import { getLocalizedCountryName } from "@/lib/i18n/countryNames";
+import { DEFAULT_LANGUAGE, type LanguageCode } from "@/lib/i18n/locales";
 import { createPinIcon } from "@/lib/mapPinIcon";
 
 const ACCENT = "#FF3C5C";
@@ -14,20 +17,23 @@ function toFeatureCollection(points: typeof COUNTRY_POINTS) {
     type: "FeatureCollection" as const,
     features: points.map((p) => ({
       type: "Feature" as const,
-      properties: { code: p.code, name: p.name },
+      properties: { code: p.code },
       geometry: { type: "Point" as const, coordinates: p.coordinates },
     })),
   };
 }
 
-function singleFeature(point: (typeof COUNTRY_POINTS)[number] | undefined) {
+function singleFeature(
+  point: (typeof COUNTRY_POINTS)[number] | undefined,
+  lang: LanguageCode = DEFAULT_LANGUAGE,
+) {
   return {
     type: "FeatureCollection" as const,
     features: point
       ? [
           {
             type: "Feature" as const,
-            properties: { code: point.code, name: point.name },
+            properties: { code: point.code, name: getLocalizedCountryName(point.code, lang) },
             geometry: { type: "Point" as const, coordinates: point.coordinates },
           },
         ]
@@ -36,18 +42,19 @@ function singleFeature(point: (typeof COUNTRY_POINTS)[number] | undefined) {
 }
 
 interface MapViewProps {
-  selectedCountry: CountryCode | null;
-  onSelectCountry: (code: CountryCode) => void;
+  focusedCountry: CountryCode | null;
+  onFocusCountry: (code: CountryCode) => void;
+  uiLanguage: LanguageCode;
 }
 
-export default function MapView({ selectedCountry, onSelectCountry }: MapViewProps) {
+export default function MapView({ focusedCountry, onFocusCountry, uiLanguage }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
-  const onSelectRef = useRef(onSelectCountry);
+  const onFocusRef = useRef(onFocusCountry);
 
   useEffect(() => {
-    onSelectRef.current = onSelectCountry;
-  }, [onSelectCountry]);
+    onFocusRef.current = onFocusCountry;
+  }, [onFocusCountry]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -64,9 +71,10 @@ export default function MapView({ selectedCountry, onSelectCountry }: MapViewPro
     });
     mapRef.current = map;
 
-    // bottom-right, not top-right: on narrow viewports the sidebar overlay
-    // covers the top of the screen, so top-right controls would be hidden.
-    map.addControl(new mapboxgl.NavigationControl(), "bottom-right");
+    // Grouped with the language/locate controls in MapControls at top-right;
+    // MapControls.module.css pushes this below them and re-offsets the
+    // whole stack under the sidebar sheet on mobile.
+    map.addControl(new mapboxgl.NavigationControl(), "top-right");
 
     map.on("load", () => {
       const bounds = COUNTRY_POINTS.reduce(
@@ -80,6 +88,8 @@ export default function MapView({ selectedCountry, onSelectCountry }: MapViewPro
 
       map.addSource("countries", { type: "geojson", data: toFeatureCollection(COUNTRY_POINTS) });
       map.addSource("countries-hover", { type: "geojson", data: singleFeature(undefined) });
+      // Seeded once at mount; the focused-country effect below keeps this
+      // source's label text in sync with the current uiLanguage afterwards.
       map.addSource("countries-active", { type: "geojson", data: singleFeature(undefined) });
 
       map.addLayer({
@@ -153,7 +163,7 @@ export default function MapView({ selectedCountry, onSelectCountry }: MapViewPro
 
       map.on("click", "countries", (e) => {
         const code = e.features?.[0]?.properties?.code as CountryCode | undefined;
-        if (code) onSelectRef.current(code);
+        if (code) onFocusRef.current(code);
       });
     });
 
@@ -167,8 +177,13 @@ export default function MapView({ selectedCountry, onSelectCountry }: MapViewPro
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
     const source = map.getSource("countries-active") as mapboxgl.GeoJSONSource | undefined;
-    source?.setData(singleFeature(COUNTRY_POINTS.find((p) => p.code === selectedCountry)));
-  }, [selectedCountry]);
+    source?.setData(singleFeature(COUNTRY_POINTS.find((p) => p.code === focusedCountry), uiLanguage));
+  }, [focusedCountry, uiLanguage]);
 
-  return <div ref={containerRef} style={{ position: "absolute", inset: 0 }} />;
+  return (
+    <div style={{ position: "absolute", inset: 0 }}>
+      <div ref={containerRef} style={{ position: "absolute", inset: 0 }} />
+      <MapControls mapRef={mapRef} uiLanguage={uiLanguage} />
+    </div>
+  );
 }

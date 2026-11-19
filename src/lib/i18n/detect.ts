@@ -3,26 +3,36 @@ import {
   COUNTRY_TO_DEFAULT_LANGUAGE,
   DEFAULT_COUNTRY,
   DEFAULT_LANGUAGE,
-  LANGUAGE_TO_DEFAULT_COUNTRY,
   isSupportedLanguage,
   type LanguageCode,
 } from "./locales";
 
-export type LocaleSource = "manual" | "accept-language" | "geo" | "default";
+export type CountrySource = "manual" | "accept-language" | "geo" | "default";
 
-export interface LocaleContext {
-  language: LanguageCode;
+export interface CountryResolution {
   country: CountryCode;
-  source: LocaleSource;
-}
-
-export interface ManualLocaleOverride {
-  language: LanguageCode;
-  country: CountryCode;
+  source: CountrySource;
 }
 
 function isKnownCountry(value: string): value is CountryCode {
   return value in COUNTRY_TO_DEFAULT_LANGUAGE;
+}
+
+/**
+ * One representative country per language, derived from
+ * `COUNTRY_TO_DEFAULT_LANGUAGE` (first entry wins) so the two never drift
+ * out of sync. Used as a last-resort country guess when a visitor's
+ * Accept-Language carries a language but no region subtag (e.g. just "ko"
+ * rather than "ko-KR") and geo-IP isn't available either — and by the
+ * language picker, which sets this as the new home country too (picking a
+ * language is usually also a signal about which country you care about).
+ */
+export const LANGUAGE_TO_FALLBACK_COUNTRY: Partial<Record<LanguageCode, CountryCode>> = {};
+for (const [country, language] of Object.entries(COUNTRY_TO_DEFAULT_LANGUAGE) as [
+  CountryCode,
+  LanguageCode,
+][]) {
+  LANGUAGE_TO_FALLBACK_COUNTRY[language] ??= country;
 }
 
 /**
@@ -45,6 +55,13 @@ export function parseAcceptLanguage(header: string | null | undefined): string[]
     .map((entry) => entry.tag);
 }
 
+/** Parses the `grl_country_override` cookie value (a bare CountryCode). */
+export function parseCountryOverride(raw: string | undefined): CountryCode | null {
+  if (!raw) return null;
+  const upper = raw.toUpperCase();
+  return isKnownCountry(upper) ? (upper as CountryCode) : null;
+}
+
 /** Matches a BCP-47 tag like "ko-KR" or "en" against our supported languages. */
 function matchSupportedLanguage(tag: string): LanguageCode | null {
   const primary = tag.split("-")[0]?.toLowerCase();
@@ -52,41 +69,67 @@ function matchSupportedLanguage(tag: string): LanguageCode | null {
 }
 
 /**
- * Resolves the active (language, country) pair.
+ * Resolves which country's platforms should sort first in the sidebar.
  *
- * Priority: manual override (always wins, persisted by the caller) >
- * Accept-Language header > geo-IP country lookup > hard default.
+ * Priority: manual override (the "use my location" button) > the region
+ * subtag of an Accept-Language entry (e.g. "de-CH") > geo-IP > the language
+ * of an Accept-Language entry with no region subtag (e.g. bare "ko") > hard
+ * default. Independent of UI language, which comes from the URL's locale
+ * segment.
  */
-export function resolveLocaleContext(input: {
+export function resolveHomeCountry(input: {
   acceptLanguageHeader?: string | null;
   geoCountry?: string | null;
-  manualOverride?: ManualLocaleOverride | null;
-}): LocaleContext {
-  if (input.manualOverride) {
-    return { ...input.manualOverride, source: "manual" };
+  countryOverride?: CountryCode | null;
+}): CountryResolution {
+  if (input.countryOverride) {
+    return { country: input.countryOverride, source: "manual" };
   }
 
-  for (const tag of parseAcceptLanguage(input.acceptLanguageHeader)) {
-    const language = matchSupportedLanguage(tag);
-    if (!language) continue;
+  const acceptedTags = parseAcceptLanguage(input.acceptLanguageHeader);
 
-    const regionSubtag = tag.split("-")[1]?.toUpperCase();
-    const country =
-      regionSubtag && isKnownCountry(regionSubtag)
-        ? regionSubtag
-        : LANGUAGE_TO_DEFAULT_COUNTRY[language];
-
-    return { language, country, source: "accept-language" };
+  for (const tag of acceptedTags) {
+    const region = tag.split("-")[1]?.toUpperCase();
+    if (region && isKnownCountry(region)) {
+      return { country: region, source: "accept-language" };
+    }
   }
 
   const geoCountry = input.geoCountry?.toUpperCase();
   if (geoCountry && isKnownCountry(geoCountry)) {
-    return {
-      language: COUNTRY_TO_DEFAULT_LANGUAGE[geoCountry],
-      country: geoCountry,
-      source: "geo",
-    };
+    return { country: geoCountry, source: "geo" };
   }
 
-  return { language: DEFAULT_LANGUAGE, country: DEFAULT_COUNTRY, source: "default" };
+  for (const tag of acceptedTags) {
+    const language = matchSupportedLanguage(tag);
+    const fallbackCountry = language && LANGUAGE_TO_FALLBACK_COUNTRY[language];
+    if (fallbackCountry) {
+      return { country: fallbackCountry, source: "accept-language" };
+    }
+  }
+
+  return { country: DEFAULT_COUNTRY, source: "default" };
+}
+
+/**
+ * Picks which locale a first-time visitor to "/" should be redirected to.
+ * Priority: Accept-Language > geo-IP's default language for that country >
+ * hard default. Used only for that one-time redirect — every page after
+ * that lives at an explicit `/<language>` URL.
+ */
+export function pickPreferredLanguage(input: {
+  acceptLanguageHeader?: string | null;
+  geoCountry?: string | null;
+}): LanguageCode {
+  for (const tag of parseAcceptLanguage(input.acceptLanguageHeader)) {
+    const language = matchSupportedLanguage(tag);
+    if (language) return language;
+  }
+
+  const geoCountry = input.geoCountry?.toUpperCase();
+  if (geoCountry && isKnownCountry(geoCountry)) {
+    return COUNTRY_TO_DEFAULT_LANGUAGE[geoCountry];
+  }
+
+  return DEFAULT_LANGUAGE;
 }

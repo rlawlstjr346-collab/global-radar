@@ -1,37 +1,46 @@
 import { NextResponse, type NextRequest } from "next/server";
-import type { CountryCode } from "@/data/platforms";
-import { MANUAL_OVERRIDE_COOKIE, RESOLVED_LOCALE_COOKIE } from "@/lib/i18n/cookies";
-import { resolveLocaleContext, type ManualLocaleOverride } from "@/lib/i18n/detect";
+import { pickPreferredLanguage } from "@/lib/i18n/detect";
 import { getGeoCountry } from "@/lib/i18n/geo";
-import { isSupportedLanguage } from "@/lib/i18n/locales";
+import { LANGUAGE_PREFERENCE_COOKIE } from "@/lib/i18n/cookies";
+import { isSupportedLanguage, SUPPORTED_LANGUAGES } from "@/lib/i18n/locales";
 
-function parseManualOverride(raw: string | undefined): ManualLocaleOverride | null {
-  if (!raw) return null;
-  const [language, country] = raw.split("-");
-  if (!language || !country || !isSupportedLanguage(language)) return null;
-  return { language, country: country as CountryCode };
-}
+const SUPPORTED_LANGUAGE_SET = new Set<string>(SUPPORTED_LANGUAGES);
 
 export function proxy(request: NextRequest) {
-  const manualOverride = parseManualOverride(
-    request.cookies.get(MANUAL_OVERRIDE_COOKIE)?.value,
-  );
+  const { pathname } = request.nextUrl;
 
-  const context = resolveLocaleContext({
-    acceptLanguageHeader: request.headers.get("accept-language"),
-    geoCountry: getGeoCountry(request),
-    manualOverride,
-  });
+  // First-time visit to the bare root: redirect to the visitor's own
+  // language, preferring a previously-made manual choice (the "use my
+  // location" of language) over re-detecting from Accept-Language every
+  // time. Every other request already carries an explicit `/<language>`
+  // segment, which is what makes each language independently crawlable.
+  if (pathname === "/") {
+    const savedPreference = request.cookies.get(LANGUAGE_PREFERENCE_COOKIE)?.value;
+    const language =
+      savedPreference && isSupportedLanguage(savedPreference)
+        ? savedPreference
+        : pickPreferredLanguage({
+            acceptLanguageHeader: request.headers.get("accept-language"),
+            geoCountry: getGeoCountry(request),
+          });
+    const target = new URL(`/${language}`, request.url);
+    target.search = request.nextUrl.search;
+    return NextResponse.redirect(target, { status: 307 });
+  }
 
-  const resolvedValue = `${context.language}-${context.country}`;
+  // For `/<language>/...` requests, forward the locale as a request header
+  // so the root layout (which sits above the `[locale]` segment and can't
+  // read its route params directly) can set `<html lang>`/`dir` correctly.
+  const firstSegment = pathname.split("/")[1];
+  if (firstSegment && SUPPORTED_LANGUAGE_SET.has(firstSegment)) {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-locale", firstSegment);
+    return NextResponse.next({ request: { headers: requestHeaders } });
+  }
 
-  const response = NextResponse.next();
-  response.cookies.set(RESOLVED_LOCALE_COOKIE, resolvedValue, { path: "/", sameSite: "lax" });
-  response.headers.set("x-grl-locale", resolvedValue);
-  response.headers.set("x-grl-locale-source", context.source);
-  return response;
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: "/:path*",
+  matcher: ["/((?!_next/|api/|favicon.ico|.*\\.[^/]+$).*)"],
 };
