@@ -12,20 +12,42 @@ import { createPinIcon } from "@/lib/mapPinIcon";
 import styles from "./MapView.module.css";
 
 const ACCENT = "#FF3C5C";
-const DESKTOP_SIDEBAR_OFFSET = 420;
-const MOBILE_COLLAPSED_HEIGHT = 146;
+const MOBILE_COLLAPSED_HEIGHT = 152;
+
+/** Matches CSS `--sidebar-w: clamp(380px, 26vw, 440px)` pixel-for-pixel. */
+function getDesktopSidebarWidth(): number {
+  if (typeof window === "undefined") return 420;
+  return Math.min(440, Math.max(380, Math.round(window.innerWidth * 0.26)));
+}
 
 function computeMapPadding(mobileCollapsed: boolean): mapboxgl.PaddingOptions {
   if (typeof window === "undefined") {
-    return { top: 48, bottom: 48, left: DESKTOP_SIDEBAR_OFFSET, right: 64 };
+    return { top: 44, bottom: 44, left: 444, right: 56 };
   }
   if (window.innerWidth <= 768) {
     const topOffset = mobileCollapsed
-      ? MOBILE_COLLAPSED_HEIGHT + 10
+      ? MOBILE_COLLAPSED_HEIGHT + 12
       : Math.round(window.innerHeight * 0.58) + 12;
     return { top: topOffset, bottom: 24, left: 16, right: 56 };
   }
-  return { top: 48, bottom: 48, left: DESKTOP_SIDEBAR_OFFSET, right: 64 };
+  return {
+    top: 44,
+    bottom: 44,
+    left: getDesktopSidebarWidth() + 24,
+    right: 56,
+  };
+}
+
+/**
+ * Full-continent bounding box spanning Alaska/US West (-130°) to New Zealand (+175°),
+ * extended by all country pins so North America never clips behind the sidebar.
+ */
+function buildWorldBounds(): mapboxgl.LngLatBounds {
+  const bounds = new mapboxgl.LngLatBounds([-130, -45], [175, 66]);
+  for (const point of COUNTRY_POINTS) {
+    bounds.extend(point.coordinates);
+  }
+  return bounds;
 }
 
 function toFeatureCollection(points: typeof COUNTRY_POINTS) {
@@ -118,8 +140,9 @@ export default function MapView({
         container: containerRef.current,
         style: "mapbox://styles/mapbox/streets-v12",
         projection: "mercator",
-        center: [15, 22],
-        zoom: 1.2,
+        center: [22, 18],
+        zoom: 0.9,
+        minZoom: 0.6,
         logoPosition: "bottom-right",
       });
     } catch {
@@ -145,12 +168,9 @@ export default function MapView({
       styleLoadedRef.current = true;
       setMapError(false);
 
+      map.resize();
       const padding = computeMapPadding(mobileCollapsedRef.current);
-      const bounds = COUNTRY_POINTS.reduce(
-        (b, p) => b.extend(p.coordinates),
-        new mapboxgl.LngLatBounds(COUNTRY_POINTS[0].coordinates, COUNTRY_POINTS[0].coordinates),
-      );
-      map.fitBounds(bounds, { padding, duration: 0 });
+      map.fitBounds(buildWorldBounds(), { padding, duration: 0 });
 
       map.addImage("pin", createPinIcon(ACCENT));
       map.addImage("pin-active", createPinIcon("#ffffff", { strokeColor: ACCENT, strokeWidth: 3 }));
@@ -175,7 +195,7 @@ export default function MapView({
         layout: {
           "icon-image": "pin",
           "icon-anchor": "bottom",
-          "icon-size": ["interpolate", ["linear"], ["zoom"], 1, 0.5, 6, 0.9],
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 0.8, 0.48, 6, 0.9],
           "icon-allow-overlap": true,
           "symbol-sort-key": ["get", "sortKey"],
         },
@@ -188,7 +208,7 @@ export default function MapView({
         layout: {
           "icon-image": "pin",
           "icon-anchor": "bottom",
-          "icon-size": ["interpolate", ["linear"], ["zoom"], 1, 0.65, 6, 1.1],
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 0.8, 0.64, 6, 1.1],
           "icon-allow-overlap": true,
           "symbol-sort-key": 200,
         },
@@ -201,7 +221,7 @@ export default function MapView({
         layout: {
           "icon-image": "pin-active",
           "icon-anchor": "bottom",
-          "icon-size": ["interpolate", ["linear"], ["zoom"], 1, 0.7, 6, 1.2],
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 0.8, 0.7, 6, 1.2],
           "icon-allow-overlap": true,
           "symbol-sort-key": 300,
         },
@@ -266,7 +286,20 @@ export default function MapView({
       }
     });
 
+    const handleResize = () => {
+      if (!styleLoadedRef.current) return;
+      map.resize();
+      if (!focusedCountryRef.current) {
+        map.fitBounds(buildWorldBounds(), {
+          padding: computeMapPadding(mobileCollapsedRef.current),
+          duration: 0,
+        });
+      }
+    };
+    window.addEventListener("resize", handleResize);
+
     return () => {
+      window.removeEventListener("resize", handleResize);
       styleLoadedRef.current = false;
       map.remove();
       mapRef.current = null;

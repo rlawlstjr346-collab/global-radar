@@ -6,7 +6,7 @@
   justify-content: center;
   background: #f4f5f7;
   padding: 24px;
-  padding-left: 424px;
+  padding-left: calc(var(--sidebar-w, clamp(380px, 26vw, 440px)) + 24px);
   text-align: center;
 }
 

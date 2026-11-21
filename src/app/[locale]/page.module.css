@@ -1,4 +1,5 @@
 .page {
+  --sidebar-w: clamp(380px, 26vw, 440px);
   --mobile-sheet-h: 58vh;
   --mobile-sheet-h: 58dvh;
   position: relative;
@@ -9,7 +10,7 @@
 }
 
 .pageMobileCollapsed {
-  --mobile-sheet-h: 146px;
+  --mobile-sheet-h: 152px;
 }
 
 .mapArea {

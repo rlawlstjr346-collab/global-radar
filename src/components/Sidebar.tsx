@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type UIEvent } from "react";
 import { COUNTRY_POINTS, type CountryPoint } from "@/data/countries";
-import { platformsForCountry, type CountryCode, type Platform } from "@/data/platforms";
+import { PLATFORMS, platformsForCountry, type CountryCode, type Platform } from "@/data/platforms";
 import { trackPlatformClick } from "@/lib/analytics";
 import { sortCountriesByProximity } from "@/lib/geo/distance";
 import { COUNTRY_SEARCH_ALIASES } from "@/lib/i18n/countryNames";
@@ -20,6 +20,7 @@ import styles from "./Sidebar.module.css";
 
 const TRANSLATE_STORAGE_KEY = "grl_tr_v1";
 const CLIENT_TRANSLATE_CACHE = new Map<string, string>();
+const QUICK_TRY_KEYWORDS = ["iPhone", "Leica", "Nike", "Vintage"] as const;
 
 function readCachedTranslation(key: string): string | null {
   const mem = CLIENT_TRANSLATE_CACHE.get(key);
@@ -189,8 +190,8 @@ export default function Sidebar({
   );
 
   const cacheKey = `${uiLanguage}:${trimmedQuery.toLowerCase()}`;
-  const shouldFetchRemote =
-    Boolean(trimmedQuery) && !isExactCountryQuery && needsRemoteTranslation(trimmedQuery, uiLanguage);
+  const isItemSearchActive = Boolean(trimmedQuery) && !isExactCountryQuery;
+  const shouldFetchRemote = isItemSearchActive && needsRemoteTranslation(trimmedQuery, uiLanguage);
 
   useEffect(() => {
     if (!shouldFetchRemote) return;
@@ -239,8 +240,7 @@ export default function Sidebar({
   const globalEnglishTerm =
     remoteTranslated || (instantTranslation.changed ? instantTranslation.translated : null);
   const showTranslationNotice =
-    Boolean(trimmedQuery) &&
-    !isExactCountryQuery &&
+    isItemSearchActive &&
     Boolean(globalEnglishTerm) &&
     globalEnglishTerm!.toLowerCase() !== trimmedQuery.toLowerCase();
 
@@ -294,6 +294,11 @@ export default function Sidebar({
     if (mobileCollapsed && value.trim()) {
       onToggleMobileCollapsed();
     }
+  };
+
+  const handleQuickTry = (keyword: string) => {
+    handleInputChange(keyword);
+    inputRef.current?.focus();
   };
 
   const handleClearSearch = () => {
@@ -355,6 +360,31 @@ export default function Sidebar({
                 </button>
               )}
             </div>
+
+            {!trimmedQuery && (
+              <div className={styles.exampleChips}>
+                {QUICK_TRY_KEYWORDS.map((keyword) => (
+                  <button
+                    key={keyword}
+                    type="button"
+                    className={styles.exampleChip}
+                    onClick={() => handleQuickTry(keyword)}
+                  >
+                    {keyword}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {isItemSearchActive && (
+              <div className={styles.activeStatusBar} role="status" aria-live="polite">
+                <span className={styles.activeStatusDot} aria-hidden="true" />
+                <span className={styles.activeStatusText}>
+                  {t.activeSearchStatus(trimmedQuery, proximityCountries.length, PLATFORMS.length)}
+                </span>
+              </div>
+            )}
+
             {showTranslationNotice && (
               <div className={styles.translationBar}>
                 <span className={styles.translationText}>
@@ -402,7 +432,7 @@ export default function Sidebar({
                     {countryLabel}
                   </button>
                   {platforms.map((platform) => {
-                    const shouldOpenHomepage = !trimmedQuery || isExactCountryQuery;
+                    const shouldOpenHomepage = !isItemSearchActive;
                     const resolved = shouldOpenHomepage
                       ? ""
                       : resolveQueryForPlatform({
@@ -442,6 +472,15 @@ export default function Sidebar({
                           <span>{platformDisplayName(platform, uiLanguage)}</span>
                           {hint && <span className={styles.queryHint}>{t.searchesHint(hint)}</span>}
                         </span>
+                        {shouldOpenHomepage ? (
+                          <span className={styles.rowArrow} aria-hidden="true">
+                            ↗
+                          </span>
+                        ) : (
+                          <span className={styles.rowSearchIndicator} aria-hidden="true">
+                            {t.searchAction} ↗
+                          </span>
+                        )}
                       </a>
                     );
                   })}
@@ -477,13 +516,14 @@ export default function Sidebar({
 function SearchIcon({ className }: { className?: string }) {
   return (
     <svg
-      width="16"
-      height="16"
+      width="18"
+      height="18"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.1"
       strokeLinecap="round"
+      strokeLinejoin="round"
       className={className}
       aria-hidden="true"
     >

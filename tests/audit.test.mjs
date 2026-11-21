@@ -129,6 +129,12 @@ test("3. All 35 locales have complete non-empty UI, SEO, Country SEO, and native
     assert.ok(ui.searchPlaceholder.trim(), `Missing searchPlaceholder for ${lang}`);
     assert.ok(ui.clearSearch.trim(), `Missing clearSearch for ${lang}`);
     assert.ok(ui.searchesHint("test").includes("test"), `Bad searchesHint for ${lang}`);
+    assert.ok(
+      ui.activeSearchStatus("iPhone", 101, 136).includes("101") &&
+        ui.activeSearchStatus("iPhone", 101, 136).includes("136"),
+      `Bad activeSearchStatus for ${lang}`,
+    );
+    assert.ok(ui.searchAction.trim(), `Missing searchAction for ${lang}`);
     assert.ok(ui.translatedNotice("test").includes("test"), `Bad translatedNotice for ${lang}`);
     assert.ok(ui.useOriginalQuery.trim(), `Missing useOriginalQuery for ${lang}`);
     assert.ok(ui.usingOriginalQuery.trim(), `Missing usingOriginalQuery for ${lang}`);
