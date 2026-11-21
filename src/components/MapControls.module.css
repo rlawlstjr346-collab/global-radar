@@ -2,7 +2,7 @@
   position: absolute;
   top: 10px;
   right: 10px;
-  z-index: 10;
+  z-index: 150;
 }
 
 .locateSlot {
@@ -20,18 +20,18 @@
 }
 
 @media (max-width: 768px) {
-  /* The sidebar covers the top 60vh on mobile, so the whole stack moves
-     below it instead of sitting under the sidebar sheet. */
+  /* Follows the mobile sidebar sheet's live height (--mobile-sheet-h) so
+     controls stay cleanly positioned in both expanded and collapsed states. */
   .langSlot {
-    top: calc(60vh + 10px);
+    top: calc(var(--mobile-sheet-h, 58dvh) + 10px);
   }
 
   .locateSlot {
-    top: calc(60vh + 161px);
+    top: calc(var(--mobile-sheet-h, 58dvh) + 150px);
   }
 
   :global(.mapboxgl-ctrl-top-right) {
-    top: calc(60vh + 47px) !important;
+    top: calc(var(--mobile-sheet-h, 58dvh) + 46px) !important;
   }
 }
 
@@ -100,6 +100,26 @@
   overflow-y: auto;
 }
 
+@media (max-width: 768px) {
+  /* When the mobile sheet is expanded (58dvh), open upward so the full
+     scrollable 35-language list never clips off the bottom of the screen
+     and never collides with the EU cookie banner. */
+  .langMenu {
+    top: auto;
+    bottom: 0;
+    right: 100%;
+    max-height: min(52dvh, 360px);
+  }
+
+  /* When the mobile sheet is collapsed (~146px), open downward into the
+     generous map space below. */
+  .langMenuMobileDown {
+    top: 0;
+    bottom: auto;
+    max-height: calc(100dvh - 180px);
+  }
+}
+
 .langOption,
 .langOptionActive {
   display: block;
@@ -110,9 +130,10 @@
   border-radius: 6px;
   font-size: 13px;
   font-family: inherit;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   white-space: nowrap;
+  color: #171717;
 }
 
 .langOption:hover {
@@ -120,7 +141,24 @@
 }
 
 .langOptionActive {
-  color: #ff3c5c;
+  color: #d92646;
   font-weight: 600;
   background: rgba(255, 60, 92, 0.08);
+}
+
+.locateToast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 250;
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: #171717;
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
 }

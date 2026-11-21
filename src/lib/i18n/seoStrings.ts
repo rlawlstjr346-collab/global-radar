@@ -83,8 +83,8 @@ export const SEO_STRINGS: Record<LanguageCode, SeoStrings> = {
       "සෑම රටකම දෙවන අත් වෙළඳපොළවල් එක තැනකින් සොයන්න — OLX, eBay, Facebook Marketplace සහ දේශීය වෙබ් අඩවි.",
   },
   ar: {
-    title: "OLX، eBay، Dubizzle وكل دولة",
-    description: "ابحث عن أسواق السلع المستعملة في كل دولة بحث واحد — OLX، eBay، Dubizzle، OpenSooq والمواقع المحلية.",
+    title: "OpenSooq، حراج، eBay وكل دولة",
+    description: "ابحث عن أسواق السلع المستعملة في كل دولة بحث واحد — OpenSooq، حراج، eBay، OLX والمواقع المحلية.",
   },
   tr: {
     title: "Sahibinden, eBay ve her ülkenin yerel siteleri",

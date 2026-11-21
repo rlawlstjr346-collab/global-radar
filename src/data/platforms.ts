@@ -19,7 +19,6 @@ export type CountryCode =
   | "GB" // United Kingdom
   | "DE" // Germany
   | "FR" // France
-  | "EU" // Generic/unspecified EU fallback
   // ---- Added for the worldwide expansion; platform data for these is
   // filled in incrementally (see SUPPORTED_COUNTRIES for what's live) ----
   | "CN" // China
@@ -33,7 +32,6 @@ export type CountryCode =
   | "PK" // Pakistan
   | "BD" // Bangladesh
   | "LK" // Sri Lanka
-  | "AE" // United Arab Emirates
   | "SA" // Saudi Arabia
   | "TR" // Turkey
   | "IL" // Israel
@@ -92,7 +90,6 @@ export type CountryCode =
   | "KZ" // Kazakhstan
   | "AZ" // Azerbaijan
   | "GE" // Georgia
-  | "AM" // Armenia
   | "NP" // Nepal
   | "MM" // Myanmar
   | "KH" // Cambodia
@@ -132,9 +129,63 @@ export interface Platform {
   notes?: string;
 }
 
-const enc = (q: string) => encodeURIComponent(q.trim());
+const cleanQuery = (q: string) => q.trim().replace(/\s+/g, " ");
+const enc = (q: string) => encodeURIComponent(cleanQuery(q));
+/** Path-segment encoder: strips slashes/fragments so special chars never emit // or %2F 400s. */
+const pathEnc = (q: string) =>
+  encodeURIComponent(
+    cleanQuery(q)
+      .replace(/[/\\?#]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
+/** Hyphen-slug encoder for OLX, Gumtree, Kijiji, MercadoLibre, and Dubizzle path URLs. */
+const slugEnc = (q: string) =>
+  encodeURIComponent(
+    cleanQuery(q)
+      .replace(/[/\\?#]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/[\s-]+/g, "-"),
+  );
+/** Plus-joined encoder for Marktplaats, 2dehands, and Encuentra24 multi-word URLs. */
+const plusEnc = (q: string) =>
+  cleanQuery(q)
+    .replace(/[/\\?#]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .map(encodeURIComponent)
+    .join("+");
 
-export const PLATFORMS: Platform[] = [
+function wrapSearchUrl(
+  homepage: string,
+  builder: (q: string, opts?: Record<string, string>) => string,
+): (q: string, opts?: Record<string, string>) => string {
+  return (q, opts) => {
+    const trimmed = cleanQuery(q);
+    if (!trimmed) return homepage;
+    const built = builder(trimmed, opts);
+    const afterProto = built.slice(built.indexOf("://") + 3);
+    const [pathPart, queryPart] = afterProto.split("?");
+    if (
+      afterProto.includes("//") ||
+      /\/s-\/k0$/.test(pathPart) ||
+      /\/b-canada\/\/k0l0$/.test(pathPart) ||
+      (queryPart === undefined &&
+        (/\/(q-|s-|@|search|hledej|k|s|q)\/?$/.test(pathPart) ||
+          /^(listado|lista)\.mercadoli[bv]re\.[^/]+\/$/.test(pathPart))) ||
+      (queryPart !== undefined &&
+        (/(?:^|&)[^=]+=(?:&|$)/.test(queryPart) || /(?:^|&)q=keyword\.(?:&|$)/.test(queryPart)))
+    ) {
+      return homepage;
+    }
+    return built;
+  };
+}
+
+const RAW_PLATFORMS: Platform[] = [
   // ---- Korea ----
   {
     id: "bunjang",
@@ -154,7 +205,7 @@ export const PLATFORMS: Platform[] = [
     nativeName: "당근마켓",
     country: "KR",
     homepage: "https://www.daangn.com",
-    buildSearchUrl: (q) => `https://www.daangn.com/search/${enc(q)}`,
+    buildSearchUrl: (q) => `https://www.daangn.com/search/${pathEnc(q)}`,
     verified: true,
     notes:
       "curl check (2026-11-19): confirmed working — title and listing cards (titles + prices, e.g. \"나이키 운동화 새제품\" / \"10,000원\") are rendered server-side for the query, with no location context needed.",
@@ -165,7 +216,7 @@ export const PLATFORMS: Platform[] = [
     nativeName: "중고나라",
     country: "KR",
     homepage: "https://web.joongna.com",
-    buildSearchUrl: (q) => `https://web.joongna.com/search/${enc(q)}`,
+    buildSearchUrl: (q) => `https://web.joongna.com/search/${pathEnc(q)}`,
     verified: true,
     notes:
       "curl check (2026-11-19): switched from the old Naver Cafe (cafe.naver.com/joonggonara, confirmed non-functional — fully client-rendered, no server-side search) to Joonggonara's own standalone web app at web.joongna.com. The /search/{query} path is confirmed working: query-specific <title> and real listing prices (e.g. \"74,013원\") present in the server-rendered payload.",
@@ -176,7 +227,7 @@ export const PLATFORMS: Platform[] = [
     nativeName: "후르츠패밀리",
     country: "KR",
     homepage: "https://www.fruitsfamily.com",
-    buildSearchUrl: (q) => `https://www.fruitsfamily.com/search/${enc(q)}`,
+    buildSearchUrl: (q) => `https://www.fruitsfamily.com/search/${pathEnc(q)}`,
     verified: true,
     notes:
       "Real-browser check (2026-11-19): used the site's own search box and read window.location after it navigated — the actual pattern is path-based (/search/{query}), not the ?keyword= guess from the earlier curl-only pass. Confirmed real shoe listings render for \"신발\".",
@@ -219,7 +270,7 @@ export const PLATFORMS: Platform[] = [
     name: "Facebook Marketplace",
     country: "US",
     homepage: "https://www.facebook.com/marketplace",
-    buildSearchUrl: (q) => `https://www.facebook.com/marketplace/search/?query=${enc(q)}`,
+    buildSearchUrl: (q) => `https://www.facebook.com/marketplace/search?query=${enc(q)}`,
     verified: false,
     notes:
       "curl check (2026-11-18): 400 Bad Request. Marketplace search generally requires a logged-in Facebook session too — needs a real logged-in-browser check, not just a URL fix.",
@@ -244,7 +295,7 @@ export const PLATFORMS: Platform[] = [
     name: "OLX India",
     country: "IN",
     homepage: "https://www.olx.in",
-    buildSearchUrl: (q) => `https://www.olx.in/items/q-${enc(q)}`,
+    buildSearchUrl: (q) => `https://www.olx.in/items/q-${slugEnc(q)}`,
     verified: false,
     notes:
       "Likely foreign-access restricted, not a URL problem: real-browser check (2026-11-19) got \"Access Denied\" (Akamai edge block, reference #18.a6023517...) on the bare homepage itself — confirmed independently from two different networks/countries, not just this automation. OLX India appears to reject non-Indian traffic at the edge. May work fine for users actually browsing from India.",
@@ -324,7 +375,7 @@ export const PLATFORMS: Platform[] = [
     nativeName: "露天拍賣",
     country: "TW",
     homepage: "https://www.ruten.com.tw",
-    buildSearchUrl: (q) => `https://www.ruten.com.tw/search/${enc(q)}/`,
+    buildSearchUrl: (q) => `https://www.ruten.com.tw/search/${pathEnc(q)}/`,
     verified: false,
     notes:
       "curl + WebFetch check (2026-11-18): 403 with cf-mitigated: challenge (Cloudflare bot-protection), not evidence the URL pattern is wrong. Ruten (PChome/eBay joint venture) is Taiwan's largest general C2C auction/secondhand site.",
@@ -334,7 +385,7 @@ export const PLATFORMS: Platform[] = [
     name: "Carousell",
     country: "TW",
     homepage: "https://tw.carousell.com",
-    buildSearchUrl: (q) => `https://tw.carousell.com/search/${enc(q)}/`,
+    buildSearchUrl: (q) => `https://tw.carousell.com/search/${pathEnc(q)}/`,
     verified: false,
     notes: "curl check (2026-11-18): 403, Cloudflare challenge — not a wrong URL.",
   },
@@ -345,7 +396,7 @@ export const PLATFORMS: Platform[] = [
     name: "Carousell",
     country: "HK",
     homepage: "https://www.carousell.com.hk",
-    buildSearchUrl: (q) => `https://www.carousell.com.hk/search/${enc(q)}/`,
+    buildSearchUrl: (q) => `https://www.carousell.com.hk/search/${pathEnc(q)}/`,
     verified: false,
     notes:
       "curl + WebFetch check (2026-11-18): 403, cf-mitigated: challenge — Cloudflare bot-protection, not evidence the pattern is wrong. Carousell is the dominant general secondhand marketplace in Hong Kong.",
@@ -357,7 +408,7 @@ export const PLATFORMS: Platform[] = [
     name: "Carousell",
     country: "SG",
     homepage: "https://www.carousell.sg",
-    buildSearchUrl: (q) => `https://www.carousell.sg/search/${enc(q)}/`,
+    buildSearchUrl: (q) => `https://www.carousell.sg/search/${pathEnc(q)}/`,
     verified: false,
     notes: "curl check (2026-11-18): 403, Cloudflare challenge. Carousell is Singapore-founded and the clear market leader there.",
   },
@@ -378,7 +429,7 @@ export const PLATFORMS: Platform[] = [
     name: "Carousell",
     country: "MY",
     homepage: "https://www.carousell.com.my",
-    buildSearchUrl: (q) => `https://www.carousell.com.my/search/${enc(q)}/`,
+    buildSearchUrl: (q) => `https://www.carousell.com.my/search/${pathEnc(q)}/`,
     verified: false,
     notes: "curl check (2026-11-18): 403, same Cloudflare challenge signal as other Carousell domains.",
   },
@@ -414,7 +465,7 @@ export const PLATFORMS: Platform[] = [
     name: "Carousell",
     country: "PH",
     homepage: "https://www.carousell.ph",
-    buildSearchUrl: (q) => `https://www.carousell.ph/search/${enc(q)}/`,
+    buildSearchUrl: (q) => `https://www.carousell.ph/search/${pathEnc(q)}/`,
     verified: false,
     notes:
       "curl check (2026-11-18): 403, Cloudflare challenge. Carousell acquired OLX Philippines in 2019 and is now the dominant general secondhand marketplace there.",
@@ -426,7 +477,7 @@ export const PLATFORMS: Platform[] = [
     name: "OLX Pakistan",
     country: "PK",
     homepage: "https://www.olx.com.pk",
-    buildSearchUrl: (q) => `https://www.olx.com.pk/items/q-${enc(q)}`,
+    buildSearchUrl: (q) => `https://www.olx.com.pk/items/q-${slugEnc(q)}`,
     verified: false,
     notes:
       "curl check (2026-11-18): 503 'Security check | OLX' — OLX's own anti-bot challenge page, not a wrong-URL signal. Same /items/q- pattern already used for olx-in and olx-id.",
@@ -463,7 +514,7 @@ export const PLATFORMS: Platform[] = [
     nativeName: "حراج",
     country: "SA",
     homepage: "https://haraj.com.sa",
-    buildSearchUrl: (q) => `https://haraj.com.sa/search/${enc(q)}/`,
+    buildSearchUrl: (q) => `https://haraj.com.sa/search/${pathEnc(q)}/`,
     verified: true,
     notes:
       "Haraj is one of Saudi Arabia's biggest general classifieds sites. curl check (2026-11-18): 200, ~271KB, confirmed real results — real post titles and SAR-currency markup. URL needs the trailing slash (site 302-redirects /search/{q} to /search/{q}/).",
@@ -554,7 +605,7 @@ export const PLATFORMS: Platform[] = [
     name: "Marktplaats",
     country: "NL",
     homepage: "https://www.marktplaats.nl",
-    buildSearchUrl: (q) => `https://www.marktplaats.nl/q/${enc(q)}/`,
+    buildSearchUrl: (q) => `https://www.marktplaats.nl/q/${plusEnc(q)}/`,
     verified: true,
     notes: "curl check (2026-11-18): 200, ~942KB, 1664 occurrences of 'iphone' — clearly real server-rendered search results.",
   },
@@ -575,7 +626,7 @@ export const PLATFORMS: Platform[] = [
     nativeName: "2dehands / 2ememain",
     country: "BE",
     homepage: "https://www.2dehands.be",
-    buildSearchUrl: (q) => `https://www.2dehands.be/q/${enc(q)}/`,
+    buildSearchUrl: (q) => `https://www.2dehands.be/q/${plusEnc(q)}/`,
     verified: true,
     notes:
       "curl check (2026-11-18): 200, ~812KB, 1209 occurrences of 'iphone' — real listing content. Same company (Adevinta) also runs the French-language mirror site 2ememain.be.",
@@ -596,7 +647,7 @@ export const PLATFORMS: Platform[] = [
     name: "Tutti",
     country: "CH",
     homepage: "https://www.tutti.ch",
-    buildSearchUrl: (q) => `https://www.tutti.ch/de/q/${enc(q)}`,
+    buildSearchUrl: (q) => `https://www.tutti.ch/de/q/${pathEnc(q)}`,
     verified: false,
     notes: "curl check (2026-11-18): 403, response body explicitly contains CAPTCHA/BOT text — confirmed bot-protection challenge.",
   },
@@ -605,7 +656,7 @@ export const PLATFORMS: Platform[] = [
     name: "Ricardo",
     country: "CH",
     homepage: "https://www.ricardo.ch",
-    buildSearchUrl: (q) => `https://www.ricardo.ch/de/s/${enc(q)}`,
+    buildSearchUrl: (q) => `https://www.ricardo.ch/de/s/${pathEnc(q)}`,
     verified: true,
     notes: "Real-browser check (2026-11-19): 158,672 results for the query; real listings with prices, e.g. \"Nike Air Force 1 MID 44\" CHF 99.",
   },
@@ -637,7 +688,7 @@ export const PLATFORMS: Platform[] = [
     name: "OLX Portugal",
     country: "PT",
     homepage: "https://www.olx.pt",
-    buildSearchUrl: (q) => `https://www.olx.pt/ads/q-${enc(q)}/`,
+    buildSearchUrl: (q) => `https://www.olx.pt/ads/q-${slugEnc(q)}/`,
     verified: true,
     notes: "curl check (2026-11-18): 200, ~2.3MB, 1040 occurrences of 'iphone' — confirmed real listing content.",
   },
@@ -677,7 +728,7 @@ export const PLATFORMS: Platform[] = [
     name: "OLX Poland",
     country: "PL",
     homepage: "https://www.olx.pl",
-    buildSearchUrl: (q) => `https://www.olx.pl/oferty/q-${enc(q)}/`,
+    buildSearchUrl: (q) => `https://www.olx.pl/oferty/q-${slugEnc(q)}/`,
     verified: true,
     notes: "curl check (2026-11-18): 200, ~4.2MB, 1,143 occurrences of 'iphone' — real server-rendered listings.",
   },
@@ -686,7 +737,7 @@ export const PLATFORMS: Platform[] = [
     name: "Allegro Lokalnie",
     country: "PL",
     homepage: "https://allegrolokalnie.pl",
-    buildSearchUrl: (q) => `https://allegrolokalnie.pl/oferty/q/${enc(q)}`,
+    buildSearchUrl: (q) => `https://allegrolokalnie.pl/oferty/q/${pathEnc(q)}`,
     verified: true,
     notes:
       "curl check (2026-11-18): 200, ~1.2MB, 385 occurrences of 'iphone' — real listing content. Allegro's local-classifieds spinoff.",
@@ -709,7 +760,7 @@ export const PLATFORMS: Platform[] = [
     nativeName: "Sbazar.cz",
     country: "CZ",
     homepage: "https://www.sbazar.cz",
-    buildSearchUrl: (q) => `https://www.sbazar.cz/hledej/${enc(q)}`,
+    buildSearchUrl: (q) => `https://www.sbazar.cz/hledej/${pathEnc(q)}`,
     verified: true,
     notes: "curl check (2026-11-18): 200, ~1.0MB, 563 occurrences of 'iphone', live result-count in meta description — confirmed real.",
   },
@@ -720,7 +771,7 @@ export const PLATFORMS: Platform[] = [
     name: "OLX Romania",
     country: "RO",
     homepage: "https://www.olx.ro",
-    buildSearchUrl: (q) => `https://www.olx.ro/oferte/q-${enc(q)}/`,
+    buildSearchUrl: (q) => `https://www.olx.ro/oferte/q-${slugEnc(q)}/`,
     verified: true,
     notes: "curl check (2026-11-18): 200, ~4.1MB, 1,178 occurrences of 'iphone' — real listing content.",
   },
@@ -812,7 +863,7 @@ export const PLATFORMS: Platform[] = [
     nativeName: "OLX Україна",
     country: "UA",
     homepage: "https://www.olx.ua",
-    buildSearchUrl: (q) => `https://www.olx.ua/list/q-${enc(q)}/`,
+    buildSearchUrl: (q) => `https://www.olx.ua/list/q-${slugEnc(q)}/`,
     verified: true,
     notes: "curl check (2026-11-18): 200, ~3.4MB, 52 real listing cards and 272+ 'iPhone' mentions in the result body.",
   },
@@ -823,7 +874,7 @@ export const PLATFORMS: Platform[] = [
     name: "Kijiji",
     country: "CA",
     homepage: "https://www.kijiji.ca",
-    buildSearchUrl: (q) => `https://www.kijiji.ca/b-canada/${enc(q)}/k0l0`,
+    buildSearchUrl: (q) => `https://www.kijiji.ca/b-canada/${slugEnc(q)}/k0l0`,
     verified: true,
     notes:
       "curl check (2026-11-18): 200, ~417KB. Page title reads '15,245 ads for iphone in All Categories in Canada | Kijiji Marketplaces', real listing-card markup.",
@@ -835,7 +886,7 @@ export const PLATFORMS: Platform[] = [
     name: "Mercado Libre",
     country: "MX",
     homepage: "https://www.mercadolibre.com.mx",
-    buildSearchUrl: (q) => `https://listado.mercadolibre.com.mx/${enc(q)}`,
+    buildSearchUrl: (q) => `https://listado.mercadolibre.com.mx/${slugEnc(q)}`,
     verified: false,
     notes:
       "URL shape is MercadoLibre's documented public search pattern. curl check (2026-11-18): 200, ~24-26KB, but the HTML is MercadoLibre's 'suspicious-traffic-frontend' soft-block shell, not real search results — needs a real browser session.",
@@ -847,7 +898,7 @@ export const PLATFORMS: Platform[] = [
     name: "Mercado Livre",
     country: "BR",
     homepage: "https://www.mercadolivre.com.br",
-    buildSearchUrl: (q) => `https://lista.mercadolivre.com.br/${enc(q)}`,
+    buildSearchUrl: (q) => `https://lista.mercadolivre.com.br/${slugEnc(q)}`,
     verified: false,
     notes: "curl check (2026-11-18): 200, ~42KB, same 'suspicious-traffic-frontend' bot-check shell as other MercadoLibre domains.",
   },
@@ -858,7 +909,7 @@ export const PLATFORMS: Platform[] = [
     name: "Mercado Libre Argentina",
     country: "AR",
     homepage: "https://www.mercadolibre.com.ar",
-    buildSearchUrl: (q) => `https://listado.mercadolibre.com.ar/${enc(q)}`,
+    buildSearchUrl: (q) => `https://listado.mercadolibre.com.ar/${slugEnc(q)}`,
     verified: false,
     notes: "curl check (2026-11-18): 200, ~42KB, same 'suspicious-traffic-frontend' bot-check shell as other MercadoLibre domains.",
   },
@@ -869,7 +920,7 @@ export const PLATFORMS: Platform[] = [
     name: "Mercado Libre Chile",
     country: "CL",
     homepage: "https://www.mercadolibre.cl",
-    buildSearchUrl: (q) => `https://listado.mercadolibre.cl/${enc(q)}`,
+    buildSearchUrl: (q) => `https://listado.mercadolibre.cl/${slugEnc(q)}`,
     verified: false,
     notes: "curl check (2026-11-18): 200, ~26KB, same 'suspicious-traffic-frontend' bot-check shell as other MercadoLibre domains.",
   },
@@ -880,7 +931,7 @@ export const PLATFORMS: Platform[] = [
     name: "Mercado Libre Colombia",
     country: "CO",
     homepage: "https://www.mercadolibre.com.co",
-    buildSearchUrl: (q) => `https://listado.mercadolibre.com.co/${enc(q)}`,
+    buildSearchUrl: (q) => `https://listado.mercadolibre.com.co/${slugEnc(q)}`,
     verified: false,
     notes: "curl check (2026-11-18): 200, ~26KB, same 'suspicious-traffic-frontend' bot-check shell as other MercadoLibre domains.",
   },
@@ -891,7 +942,7 @@ export const PLATFORMS: Platform[] = [
     name: "Mercado Libre",
     country: "PE",
     homepage: "https://www.mercadolibre.com.pe",
-    buildSearchUrl: (q) => `https://listado.mercadolibre.com.pe/${enc(q)}`,
+    buildSearchUrl: (q) => `https://listado.mercadolibre.com.pe/${slugEnc(q)}`,
     verified: false,
     notes:
       "curl check (2026-11-18): homepage fine (200, ~390KB), but the listado subdomain redirects to an account-verification bot-check page, same signature as eBay elsewhere in this file. URL shape itself is MercadoLibre's documented convention.",
@@ -903,7 +954,7 @@ export const PLATFORMS: Platform[] = [
     name: "Gumtree South Africa",
     country: "ZA",
     homepage: "https://www.gumtree.co.za",
-    buildSearchUrl: (q) => `https://www.gumtree.co.za/s-${enc(q)}/k0`,
+    buildSearchUrl: (q) => `https://www.gumtree.co.za/s-${slugEnc(q)}/k0`,
     verified: false,
     notes:
       "OLX South Africa was permanently shut down by Naspers in Feb 2022 (confirmed: olx.co.za now serves a static shutdown notice). Gumtree South Africa is the long-standing dominant general classifieds site instead. curl check (2026-11-18): 403, Cloudflare challenge — bot-blocked.",
@@ -927,7 +978,7 @@ export const PLATFORMS: Platform[] = [
     name: "Dubizzle Egypt",
     country: "EG",
     homepage: "https://www.dubizzle.com.eg/en/",
-    buildSearchUrl: (q) => `https://www.dubizzle.com.eg/en/cairo/q-${enc(q)}/`,
+    buildSearchUrl: (q) => `https://www.dubizzle.com.eg/en/cairo/q-${slugEnc(q)}/`,
     verified: false,
     notes:
       "OLX Egypt was rebranded to Dubizzle Egypt; the OLX brand no longer represents the live site. curl check (2026-11-18): 503 'Security check | Dubizzle' JS-challenge on every path tried — bot-blocked. Search is location-scoped by design; 'cairo' used as a default.",
@@ -963,7 +1014,7 @@ export const PLATFORMS: Platform[] = [
     name: "Gumtree Australia",
     country: "AU",
     homepage: "https://www.gumtree.com.au",
-    buildSearchUrl: (q) => `https://www.gumtree.com.au/s-${enc(q)}/k0`,
+    buildSearchUrl: (q) => `https://www.gumtree.com.au/s-${slugEnc(q)}/k0`,
     verified: true,
     notes: "Real-browser check (2026-11-19): real listings with prices, e.g. \"Nike, Adidas, ASIC sports shoes new\" $85.",
   },
@@ -1071,7 +1122,7 @@ export const PLATFORMS: Platform[] = [
     name: "OLX Bulgaria",
     country: "BG",
     homepage: "https://www.olx.bg",
-    buildSearchUrl: (q) => `https://www.olx.bg/ads/q-${enc(q)}/`,
+    buildSearchUrl: (q) => `https://www.olx.bg/ads/q-${slugEnc(q)}/`,
     verified: true,
     notes: "curl check (2026-11-18): 200, ~2.2MB, 990 occurrences of 'iphone' — confirmed real listing content.",
   },
@@ -1091,7 +1142,7 @@ export const PLATFORMS: Platform[] = [
     name: "OLX Serbia",
     country: "RS",
     homepage: "https://www.olx.rs",
-    buildSearchUrl: (q) => `https://www.olx.rs/artikli/q-${enc(q)}/`,
+    buildSearchUrl: (q) => `https://www.olx.rs/artikli/q-${slugEnc(q)}/`,
     verified: false,
     notes:
       "curl check (2026-11-18): persistent 503 'Service Temporarily Unavailable' on repeated attempts — not evidence the pattern is wrong. No Vinted domain exists for Serbia.",
@@ -1215,7 +1266,7 @@ export const PLATFORMS: Platform[] = [
     name: "OLX Lebanon",
     country: "LB",
     homepage: "https://www.olx.com.lb/en/",
-    buildSearchUrl: (q) => `https://www.olx.com.lb/en/ads/q-${enc(q)}/`,
+    buildSearchUrl: (q) => `https://www.olx.com.lb/en/ads/q-${slugEnc(q)}/`,
     verified: true,
     notes:
       "Real-browser check (2026-11-19): real listing present (Birkenstock Sandals, USD 250).",
@@ -1290,7 +1341,7 @@ export const PLATFORMS: Platform[] = [
     name: "OLX Kazakhstan",
     country: "KZ",
     homepage: "https://www.olx.kz",
-    buildSearchUrl: (q) => `https://www.olx.kz/list/q-${enc(q)}/`,
+    buildSearchUrl: (q) => `https://www.olx.kz/list/q-${slugEnc(q)}/`,
     verified: true,
     notes: "curl check (2026-11-18): 200, ~3.4MB, 565 occurrences of 'iphone', 52 real listing cards — confirmed real results.",
   },
@@ -1361,7 +1412,7 @@ export const PLATFORMS: Platform[] = [
     name: "Facebook Marketplace",
     country: "LA",
     homepage: "https://www.facebook.com/marketplace",
-    buildSearchUrl: (q) => `https://www.facebook.com/marketplace/search/?query=${enc(q)}`,
+    buildSearchUrl: (q) => `https://www.facebook.com/marketplace/search?query=${enc(q)}`,
     verified: false,
     notes:
       "Laos has no confirmed major dedicated secondhand classifieds site; Facebook is the de facto dominant channel there (same reasoning as facebook-marketplace-us). Several candidate domains were investigated and rejected as too small, defunct, or hijacked.",
@@ -1442,7 +1493,7 @@ export const PLATFORMS: Platform[] = [
     name: "Tayara",
     country: "TN",
     homepage: "https://www.tayara.tn",
-    buildSearchUrl: (q) => `https://www.tayara.tn/ads/k/${enc(q)}`,
+    buildSearchUrl: (q) => `https://www.tayara.tn/ads/k/${pathEnc(q)}`,
     verified: true,
     notes:
       "Avito does NOT operate in Tunisia (avito.tn doesn't resolve); Tayara.tn is Tunisia's actual dominant classifieds site. curl check (2026-11-18): 200, ~171KB, 152 occurrences of 'iphone' — confirmed real listings.",
@@ -1511,7 +1562,7 @@ export const PLATFORMS: Platform[] = [
     name: "Mercado Libre Ecuador",
     country: "EC",
     homepage: "https://www.mercadolibre.com.ec",
-    buildSearchUrl: (q) => `https://listado.mercadolibre.com.ec/${enc(q)}`,
+    buildSearchUrl: (q) => `https://listado.mercadolibre.com.ec/${slugEnc(q)}`,
     verified: false,
     notes: "curl check (2026-11-18): 200, ~26KB, same 'suspicious-traffic-frontend' bot-check shell as other MercadoLibre domains.",
   },
@@ -1522,7 +1573,7 @@ export const PLATFORMS: Platform[] = [
     name: "Mercado Libre Venezuela",
     country: "VE",
     homepage: "https://www.mercadolibre.com.ve",
-    buildSearchUrl: (q) => `https://listado.mercadolibre.com.ve/${enc(q)}`,
+    buildSearchUrl: (q) => `https://listado.mercadolibre.com.ve/${slugEnc(q)}`,
     verified: false,
     notes: "curl check (2026-11-18): 200, ~26KB, same 'suspicious-traffic-frontend' bot-check shell as other MercadoLibre domains.",
   },
@@ -1533,7 +1584,7 @@ export const PLATFORMS: Platform[] = [
     name: "Mercado Libre Uruguay",
     country: "UY",
     homepage: "https://www.mercadolibre.com.uy",
-    buildSearchUrl: (q) => `https://listado.mercadolibre.com.uy/${enc(q)}`,
+    buildSearchUrl: (q) => `https://listado.mercadolibre.com.uy/${slugEnc(q)}`,
     verified: false,
     notes:
       "curl check (2026-11-18): same 'suspicious-traffic-frontend' bot-check shell; confirmed again in a real browser (login wall). No comparably major general-secondhand local alternative found.",
@@ -1545,7 +1596,7 @@ export const PLATFORMS: Platform[] = [
     name: "Mercado Libre Paraguay",
     country: "PY",
     homepage: "https://www.mercadolibre.com.py",
-    buildSearchUrl: (q) => `https://listado.mercadolibre.com.py/${enc(q)}`,
+    buildSearchUrl: (q) => `https://listado.mercadolibre.com.py/${slugEnc(q)}`,
     verified: false,
     notes: "curl check (2026-11-18): 200, ~26KB, same 'suspicious-traffic-frontend' bot-check shell as other MercadoLibre domains.",
   },
@@ -1554,7 +1605,7 @@ export const PLATFORMS: Platform[] = [
     name: "Clasipar",
     country: "PY",
     homepage: "https://clasipar.paraguay.com",
-    buildSearchUrl: (q) => `https://clasipar.paraguay.com/@${enc(q)}`,
+    buildSearchUrl: (q) => `https://clasipar.paraguay.com/@${pathEnc(q)}`,
     verified: true,
     notes:
       "Paraguay's most-visited classifieds portal per their own traffic claims. Browser check (2026-11-18): searching 'iphone' returned a real listing (iPhone 17 Pro Max, Asunción).",
@@ -1566,7 +1617,7 @@ export const PLATFORMS: Platform[] = [
     name: "Mercado Libre Bolivia",
     country: "BO",
     homepage: "https://www.mercadolibre.com.bo",
-    buildSearchUrl: (q) => `https://listado.mercadolibre.com.bo/${enc(q)}`,
+    buildSearchUrl: (q) => `https://listado.mercadolibre.com.bo/${slugEnc(q)}`,
     verified: false,
     notes:
       "curl check (2026-11-18): 200, ~26KB, same 'suspicious-traffic-frontend' bot-check shell. No genuinely major general-secondhand local alternative found.",
@@ -1578,7 +1629,7 @@ export const PLATFORMS: Platform[] = [
     name: "Mercado Libre Guatemala",
     country: "GT",
     homepage: "https://www.mercadolibre.com.gt",
-    buildSearchUrl: (q) => `https://listado.mercadolibre.com.gt/${enc(q)}`,
+    buildSearchUrl: (q) => `https://listado.mercadolibre.com.gt/${slugEnc(q)}`,
     verified: false,
     notes: "curl check (2026-11-18): 200, ~26KB, same 'suspicious-traffic-frontend' bot-check shell as other MercadoLibre domains.",
   },
@@ -1588,7 +1639,7 @@ export const PLATFORMS: Platform[] = [
     country: "GT",
     homepage: "https://www.encuentra24.com/guatemala-es/",
     buildSearchUrl: (q) =>
-      `https://www.encuentra24.com/guatemala-es/searchresult/marketplace?q=keyword.${enc(q)}`,
+      `https://www.encuentra24.com/guatemala-es/searchresult/marketplace?q=keyword.${plusEnc(q)}`,
     verified: true,
     notes:
       "Major Central American classifieds platform (9 countries). Verified live in a real browser (2026-11-18): searching 'iphone' returned 26 real listings.",
@@ -1600,7 +1651,7 @@ export const PLATFORMS: Platform[] = [
     name: "Mercado Libre Costa Rica",
     country: "CR",
     homepage: "https://www.mercadolibre.co.cr",
-    buildSearchUrl: (q) => `https://listado.mercadolibre.co.cr/${enc(q)}`,
+    buildSearchUrl: (q) => `https://listado.mercadolibre.co.cr/${slugEnc(q)}`,
     verified: false,
     notes: "curl check (2026-11-18): 200, ~26KB, same 'suspicious-traffic-frontend' bot-check shell as other MercadoLibre domains.",
   },
@@ -1610,7 +1661,7 @@ export const PLATFORMS: Platform[] = [
     country: "CR",
     homepage: "https://www.encuentra24.com/costa-rica-es/",
     buildSearchUrl: (q) =>
-      `https://www.encuentra24.com/costa-rica-es/searchresult/marketplace?q=keyword.${enc(q)}`,
+      `https://www.encuentra24.com/costa-rica-es/searchresult/marketplace?q=keyword.${plusEnc(q)}`,
     verified: true,
     notes:
       "Encuentra24's second-deepest market (~20k+ listings). Verified live in a real browser (2026-11-18): searching 'iphone' returned real listings (iPhone 17 Pro, 16 Pro Max, etc).",
@@ -1622,7 +1673,7 @@ export const PLATFORMS: Platform[] = [
     name: "Mercado Libre Panama",
     country: "PA",
     homepage: "https://www.mercadolibre.com.pa",
-    buildSearchUrl: (q) => `https://listado.mercadolibre.com.pa/${enc(q)}`,
+    buildSearchUrl: (q) => `https://listado.mercadolibre.com.pa/${slugEnc(q)}`,
     verified: false,
     notes: "curl check (2026-11-18): 200, ~26KB, same 'suspicious-traffic-frontend' bot-check shell as other MercadoLibre domains.",
   },
@@ -1632,7 +1683,7 @@ export const PLATFORMS: Platform[] = [
     country: "PA",
     homepage: "https://www.encuentra24.com/panama-es/",
     buildSearchUrl: (q) =>
-      `https://www.encuentra24.com/panama-es/searchresult/marketplace?q=keyword.${enc(q)}`,
+      `https://www.encuentra24.com/panama-es/searchresult/marketplace?q=keyword.${plusEnc(q)}`,
     verified: true,
     notes:
       "Encuentra24's deepest market (~95k+ listings) and headquartered there. Verified live in a real browser (2026-11-18): searching 'iphone' returned 50+ real listings.",
@@ -1644,7 +1695,7 @@ export const PLATFORMS: Platform[] = [
     name: "Mercado Libre República Dominicana",
     country: "DO",
     homepage: "https://www.mercadolibre.com.do",
-    buildSearchUrl: (q) => `https://listado.mercadolibre.com.do/${enc(q)}`,
+    buildSearchUrl: (q) => `https://listado.mercadolibre.com.do/${slugEnc(q)}`,
     verified: false,
     notes: "curl check (2026-11-18): 200, ~26KB, same 'suspicious-traffic-frontend' bot-check shell as other MercadoLibre domains.",
   },
@@ -1654,18 +1705,28 @@ export const PLATFORMS: Platform[] = [
     country: "DO",
     homepage: "https://www.encuentra24.com/dominicana-es/",
     buildSearchUrl: (q) =>
-      `https://www.encuentra24.com/dominicana-es/searchresult/marketplace?q=keyword.${enc(q)}`,
+      `https://www.encuentra24.com/dominicana-es/searchresult/marketplace?q=keyword.${plusEnc(q)}`,
     verified: true,
     notes:
       "Verified live in a real browser (2026-11-18): searching 'iphone' returned 13 real listings. Corotos.com.do (DR's historical #1) was down for maintenance when checked — worth a retry later.",
   },
 ];
 
+export const PLATFORMS: Platform[] = RAW_PLATFORMS.map((platform) => ({
+  ...platform,
+  buildSearchUrl: wrapSearchUrl(platform.homepage, platform.buildSearchUrl),
+}));
+
+const PLATFORMS_BY_COUNTRY = new Map<CountryCode, Platform[]>();
+for (const platform of PLATFORMS) {
+  const list = PLATFORMS_BY_COUNTRY.get(platform.country);
+  if (list) list.push(platform);
+  else PLATFORMS_BY_COUNTRY.set(platform.country, [platform]);
+}
+
 export function platformsForCountry(country: CountryCode): Platform[] {
-  return PLATFORMS.filter((p) => p.country === country);
+  return PLATFORMS_BY_COUNTRY.get(country) ?? [];
 }
 
 /** Country codes that currently have at least one platform entry. */
-export const SUPPORTED_COUNTRIES: CountryCode[] = Array.from(
-  new Set(PLATFORMS.map((p) => p.country)),
-);
+export const SUPPORTED_COUNTRIES: CountryCode[] = Array.from(PLATFORMS_BY_COUNTRY.keys());

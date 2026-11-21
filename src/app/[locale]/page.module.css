@@ -1,8 +1,15 @@
 .page {
+  --mobile-sheet-h: 58vh;
+  --mobile-sheet-h: 58dvh;
   position: relative;
   width: 100%;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
+}
+
+.pageMobileCollapsed {
+  --mobile-sheet-h: 146px;
 }
 
 .mapArea {

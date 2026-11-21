@@ -1,11 +1,9 @@
-import type { CountryCode } from "@/data/platforms";
-
 /**
- * EU member states (GDPR scope) that exist in our CountryCode union. Used to
- * gate the cookie-consent banner to EU visitors only — everywhere else, GA4
- * loads the same way it always has.
+ * All 27 EU member states (GDPR scope). Uses plain ISO-3166-1 alpha-2 strings
+ * (not just our CountryCode union) so countries without dedicated platform
+ * entries yet — such as Malta (MT) — still trigger the EU cookie-consent gate.
  */
-const EU_COUNTRIES = new Set<CountryCode>([
+const EU_COUNTRIES = new Set<string>([
   "AT",
   "BE",
   "BG",
@@ -24,6 +22,7 @@ const EU_COUNTRIES = new Set<CountryCode>([
   "LV",
   "LT",
   "LU",
+  "MT",
   "NL",
   "PL",
   "PT",
@@ -35,5 +34,5 @@ const EU_COUNTRIES = new Set<CountryCode>([
 ]);
 
 export function isEuCountry(code: string | null | undefined): boolean {
-  return !!code && EU_COUNTRIES.has(code.toUpperCase() as CountryCode);
+  return !!code && EU_COUNTRIES.has(code.toUpperCase());
 }

@@ -27,5 +27,14 @@ export default function sitemap(): MetadataRoute.Sitemap {
     })),
   );
 
-  return [...homePages, ...countryPages];
+  const privacyPage: MetadataRoute.Sitemap = [
+    {
+      url: `${BASE_URL}/privacy`,
+      lastModified,
+      changeFrequency: "monthly",
+      priority: 0.3,
+    },
+  ];
+
+  return [...homePages, ...countryPages, ...privacyPage];
 }

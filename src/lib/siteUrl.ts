@@ -1,6 +1,8 @@
 /**
- * Set NEXT_PUBLIC_SITE_URL once a real domain is live — this placeholder is
- * the one thing to update at deploy time (sitemap, robots, and OG/metadata
- * links all read from here).
+ * Canonical origin used by sitemap, robots.txt, and OG/metadata links.
+ * Falls back to the live production domain so missing env vars never emit
+ * localhost URLs in production crawls.
  */
-export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+export const SITE_URL = (
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://worldsecondhandmarket.com"
+).replace(/\/+$/, "");

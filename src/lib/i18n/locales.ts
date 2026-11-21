@@ -78,6 +78,12 @@ export const SUPPORTED_LANGUAGES: LanguageCode[] = [
 export const DEFAULT_LANGUAGE: LanguageCode = "en";
 export const DEFAULT_COUNTRY: CountryCode = "US";
 
+export const RTL_LANGUAGES = new Set<LanguageCode>(["ar", "he", "ur"]);
+
+export function getLanguageDir(lang: LanguageCode): "rtl" | "ltr" {
+  return RTL_LANGUAGES.has(lang) ? "rtl" : "ltr";
+}
+
 /** Best-guess default language for a country when resolving from geo-IP. */
 export const COUNTRY_TO_DEFAULT_LANGUAGE: Record<CountryCode, LanguageCode> = {
   KR: "ko",
@@ -88,7 +94,6 @@ export const COUNTRY_TO_DEFAULT_LANGUAGE: Record<CountryCode, LanguageCode> = {
   ID: "id",
   DE: "de",
   FR: "fr",
-  EU: "en",
   CN: "zh",
   TW: "zh",
   HK: "zh",
@@ -100,7 +105,6 @@ export const COUNTRY_TO_DEFAULT_LANGUAGE: Record<CountryCode, LanguageCode> = {
   PK: "ur",
   BD: "bn",
   LK: "si",
-  AE: "ar",
   SA: "ar",
   TR: "tr",
   IL: "he",
@@ -158,7 +162,6 @@ export const COUNTRY_TO_DEFAULT_LANGUAGE: Record<CountryCode, LanguageCode> = {
   KZ: "ru",
   AZ: "tr",
   GE: "ru",
-  AM: "ru",
   NP: "hi",
   MM: "en",
   KH: "en",

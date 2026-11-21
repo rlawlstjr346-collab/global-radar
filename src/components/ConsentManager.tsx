@@ -2,8 +2,9 @@
 
 import { useSyncExternalStore } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { getConsentServerSnapshot, getConsentSnapshot, setConsent, subscribeConsent } from "@/lib/consent";
-import type { LanguageCode } from "@/lib/i18n/locales";
+import { isSupportedLanguage, type LanguageCode } from "@/lib/i18n/locales";
 import { getUiStrings } from "@/lib/i18n/uiStrings";
 import GoogleAnalytics from "./GoogleAnalytics";
 import styles from "./ConsentManager.module.css";
@@ -16,13 +17,15 @@ interface ConsentManagerProps {
 
 /**
  * Gates GA4 behind an accept/decline banner for EU visitors only (GDPR
- * scope), matching the sibling "World Vintage Shop Map" site's choice not
- * to show this outside the EU. Everywhere else, GA4 loads exactly like it
- * always has — unconditionally, no banner.
+ * scope). Reads the live locale segment from `usePathname()` so switching
+ * languages client-side immediately updates the banner copy too.
  */
 export default function ConsentManager({ requiresConsent, uiLanguage }: ConsentManagerProps) {
   const consent = useSyncExternalStore(subscribeConsent, getConsentSnapshot, getConsentServerSnapshot);
-  const t = getUiStrings(uiLanguage).cookieBanner;
+  const pathname = usePathname();
+  const pathLocale = pathname?.split("/")[1];
+  const activeLanguage = pathLocale && isSupportedLanguage(pathLocale) ? pathLocale : uiLanguage;
+  const t = getUiStrings(activeLanguage).cookieBanner;
 
   const gaAllowed = !requiresConsent || consent === "accepted";
 

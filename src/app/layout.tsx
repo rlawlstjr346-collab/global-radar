@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import ConsentManager from "@/components/ConsentManager";
 import { isEuCountry } from "@/lib/i18n/euCountries";
 import { getGeoCountry } from "@/lib/i18n/geo";
-import { DEFAULT_LANGUAGE, isSupportedLanguage } from "@/lib/i18n/locales";
+import { DEFAULT_LANGUAGE, getLanguageDir, isSupportedLanguage } from "@/lib/i18n/locales";
 import { SITE_URL } from "@/lib/siteUrl";
 import "./globals.css";
 
@@ -30,7 +30,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   const requiresConsent = isEuCountry(getGeoCountry({ headers: hdrs }));
 
   return (
-    <html lang={locale}>
+    <html lang={locale} dir={getLanguageDir(locale)}>
       <body>
         {children}
         <ConsentManager requiresConsent={requiresConsent} uiLanguage={locale} />

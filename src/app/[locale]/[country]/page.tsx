@@ -3,8 +3,8 @@ import { notFound } from "next/navigation";
 import { COUNTRY_POINTS } from "@/data/countries";
 import { platformsForCountry, type CountryCode } from "@/data/platforms";
 import { getCountryPageSeo } from "@/lib/i18n/countryPageSeo";
-import { getLocalizedCountryName } from "@/lib/i18n/countryNames";
-import { isSupportedLanguage, SUPPORTED_LANGUAGES } from "@/lib/i18n/locales";
+import { getLocalizedCountryName, getLocalizedCountryNamesMap } from "@/lib/i18n/countryNames";
+import { DEFAULT_LANGUAGE, isSupportedLanguage, SUPPORTED_LANGUAGES } from "@/lib/i18n/locales";
 import { getBrandName } from "@/lib/i18n/uiStrings";
 import HomeClient from "../HomeClient";
 
@@ -47,15 +47,33 @@ export async function generateMetadata({ params }: CountryPageProps): Promise<Me
   const seo = getCountryPageSeo(resolved.locale);
   const brandName = getBrandName(resolved.locale);
   const countrySlug = resolved.point.code.toLowerCase();
+  const fullTitle = `${seo.title(countryName)} | ${brandName}`;
+  const description = seo.description(countryName, platformNames);
 
   return {
-    title: `${seo.title(countryName)} | ${brandName}`,
-    description: seo.description(countryName, platformNames),
+    title: fullTitle,
+    description,
     alternates: {
       canonical: `/${resolved.locale}/${countrySlug}`,
-      languages: Object.fromEntries(
-        SUPPORTED_LANGUAGES.map((lang) => [lang, `/${lang}/${countrySlug}`]),
-      ),
+      languages: {
+        ...Object.fromEntries(
+          SUPPORTED_LANGUAGES.map((lang) => [lang, `/${lang}/${countrySlug}`]),
+        ),
+        "x-default": `/${DEFAULT_LANGUAGE}/${countrySlug}`,
+      },
+    },
+    openGraph: {
+      title: fullTitle,
+      description,
+      type: "website",
+      siteName: brandName,
+      locale: resolved.locale,
+      url: `/${resolved.locale}/${countrySlug}`,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: fullTitle,
+      description,
     },
   };
 }
@@ -65,10 +83,13 @@ export default async function CountryPage({ params }: CountryPageProps) {
   const resolved = resolveParams(locale, country);
   if (!resolved) notFound();
 
+  const localizedCountryNames = getLocalizedCountryNamesMap(resolved.locale);
+
   return (
     <HomeClient
       homeCountry={resolved.point.code}
       uiLanguage={resolved.locale}
+      localizedCountryNames={localizedCountryNames}
       initialFocusedCountry={resolved.point.code}
     />
   );

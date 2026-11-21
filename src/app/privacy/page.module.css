@@ -10,7 +10,7 @@
 .back {
   display: inline-block;
   margin-bottom: 24px;
-  color: #ff3c5c;
+  color: #d92646;
   font-size: 13px;
   font-weight: 600;
   text-decoration: none;
@@ -28,7 +28,7 @@
 
 .updated {
   font-size: 13px;
-  color: #888888;
+  color: #595959;
   margin: 0 0 32px;
 }
 
@@ -53,5 +53,5 @@
 }
 
 .section a {
-  color: #ff3c5c;
+  color: #d92646;
 }

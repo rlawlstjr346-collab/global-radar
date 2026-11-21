@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import mapboxgl from "mapbox-gl";
 import { COUNTRY_POINTS } from "@/data/countries";
 import type { CountryCode } from "@/data/platforms";
@@ -28,12 +28,56 @@ function setLanguagePreference(language: LanguageCode) {
 interface MapControlsProps {
   mapRef: RefObject<mapboxgl.Map | null>;
   uiLanguage: LanguageCode;
+  onLocateCountry: (code: CountryCode) => void;
+  getPadding: () => mapboxgl.PaddingOptions;
+  mobileCollapsed: boolean;
 }
 
-export default function MapControls({ mapRef, uiLanguage }: MapControlsProps) {
+export default function MapControls({
+  mapRef,
+  uiLanguage,
+  onLocateCountry,
+  getPadding,
+  mobileCollapsed,
+}: MapControlsProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [locateToast, setLocateToast] = useState<string | null>(null);
+  const langWrapperRef = useRef<HTMLDivElement>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
   const t = getUiStrings(uiLanguage);
+
+  const showLocateToast = (message: string) => {
+    setLocateToast(message);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setLocateToast(null), 3500);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const handlePointerDown = (e: PointerEvent) => {
+      if (langWrapperRef.current && !langWrapperRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [menuOpen]);
 
   const handleSelectLanguage = (language: LanguageCode) => {
     setMenuOpen(false);
@@ -46,19 +90,30 @@ export default function MapControls({ mapRef, uiLanguage }: MapControlsProps) {
   };
 
   const handleLocate = () => {
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation) {
+      showLocateToast(t.locateError);
+      return;
+    }
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const coords: [number, number] = [position.coords.longitude, position.coords.latitude];
         const nearest = nearestCountry(COUNTRY_POINTS, coords);
-        if (!nearest) return;
+        if (!nearest) {
+          showLocateToast(t.locateError);
+          return;
+        }
 
         setCountryOverride(nearest.code);
-        mapRef.current?.flyTo({ center: nearest.coordinates, zoom: 4, duration: 1200 });
-        router.refresh();
+        onLocateCountry(nearest.code);
+        mapRef.current?.flyTo({
+          center: nearest.coordinates,
+          zoom: 4,
+          padding: getPadding(),
+          duration: 1000,
+        });
       },
       () => {
-        // Permission denied or unavailable — leave the current country as-is.
+        showLocateToast(t.locateError);
       },
       { timeout: 8000 },
     );
@@ -67,22 +122,27 @@ export default function MapControls({ mapRef, uiLanguage }: MapControlsProps) {
   return (
     <>
       <div className={styles.langSlot}>
-        <div className={styles.langWrapper}>
+        <div className={styles.langWrapper} ref={langWrapperRef}>
           <button
             type="button"
             className={styles.langButton}
             aria-label={t.languageLabel}
+            aria-expanded={menuOpen}
             onClick={() => setMenuOpen((open) => !open)}
           >
             <GlobeIcon className={styles.icon} />
             {LANGUAGE_NATIVE_NAMES[uiLanguage]}
           </button>
           {menuOpen && (
-            <ul className={styles.langMenu}>
+            <ul
+              className={`${styles.langMenu} ${mobileCollapsed ? styles.langMenuMobileDown : ""}`}
+              role="menu"
+            >
               {SUPPORTED_LANGUAGES.map((language) => (
                 <li key={language}>
                   <button
                     type="button"
+                    role="menuitem"
                     className={language === uiLanguage ? styles.langOptionActive : styles.langOption}
                     onClick={() => handleSelectLanguage(language)}
                   >
@@ -95,10 +155,21 @@ export default function MapControls({ mapRef, uiLanguage }: MapControlsProps) {
         </div>
       </div>
       <div className={styles.locateSlot}>
-        <button type="button" className={styles.locateButton} aria-label={t.locateMe} onClick={handleLocate}>
+        <button
+          type="button"
+          className={styles.locateButton}
+          aria-label={t.locateMe}
+          title={t.locateMe}
+          onClick={handleLocate}
+        >
           <LocateIcon />
         </button>
       </div>
+      {locateToast && (
+        <div className={styles.locateToast} role="status" aria-live="polite">
+          {locateToast}
+        </div>
+      )}
     </>
   );
 }

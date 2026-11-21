@@ -22,7 +22,7 @@
 }
 
 .link {
-  color: #ff3c5c;
+  color: #d92646;
   text-decoration: underline;
   white-space: nowrap;
 }
@@ -55,12 +55,12 @@
 }
 
 .accept {
-  background: #ff3c5c;
+  background: #d92646;
   color: #ffffff;
 }
 
 .accept:hover {
-  background: #e6334f;
+  background: #bf1f3c;
 }
 
 @media (max-width: 768px) {

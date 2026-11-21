@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { isSupportedLanguage, SUPPORTED_LANGUAGES } from "@/lib/i18n/locales";
+import { DEFAULT_LANGUAGE, isSupportedLanguage, SUPPORTED_LANGUAGES } from "@/lib/i18n/locales";
 import { getSeoStrings } from "@/lib/i18n/seoStrings";
 import { getBrandName } from "@/lib/i18n/uiStrings";
 
@@ -19,13 +19,30 @@ export async function generateMetadata({ params }: LocaleLayoutProps): Promise<M
 
   const seo = getSeoStrings(locale);
   const brandName = getBrandName(locale);
+  const fullTitle = `${brandName} | ${seo.title}`;
 
   return {
-    title: `${brandName} | ${seo.title}`,
+    title: fullTitle,
     description: seo.description,
     alternates: {
       canonical: `/${locale}`,
-      languages: Object.fromEntries(SUPPORTED_LANGUAGES.map((lang) => [lang, `/${lang}`])),
+      languages: {
+        ...Object.fromEntries(SUPPORTED_LANGUAGES.map((lang) => [lang, `/${lang}`])),
+        "x-default": `/${DEFAULT_LANGUAGE}`,
+      },
+    },
+    openGraph: {
+      title: fullTitle,
+      description: seo.description,
+      type: "website",
+      siteName: brandName,
+      locale,
+      url: `/${locale}`,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: fullTitle,
+      description: seo.description,
     },
   };
 }

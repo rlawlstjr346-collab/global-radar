@@ -2,16 +2,33 @@
 
 import Script from "next/script";
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { GA_MEASUREMENT_ID, trackPageView } from "@/lib/analytics";
 
-/** Loads GA4 and fires a page_view on every client-side route change (locale/country switches don't trigger a full reload, so GA's own automatic page_view would otherwise miss them). */
+/**
+ * Loads GA4 and fires a deduplicated `page_view` on both initial load
+ * (triggered via `onReady` once `window.gtag` is initialized) and subsequent
+ * client-side route changes (via `useEffect`).
+ */
 export default function GoogleAnalytics() {
   const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
+  const lastTrackedPathRef = useRef<string | null>(null);
 
   useEffect(() => {
-    trackPageView(pathname);
+    pathnameRef.current = pathname;
   }, [pathname]);
+
+  const sendIfUntracked = useCallback((path: string) => {
+    if (!GA_MEASUREMENT_ID || typeof window === "undefined" || !window.gtag) return;
+    if (lastTrackedPathRef.current === path) return;
+    lastTrackedPathRef.current = path;
+    trackPageView(path);
+  }, []);
+
+  useEffect(() => {
+    sendIfUntracked(pathname);
+  }, [pathname, sendIfUntracked]);
 
   if (!GA_MEASUREMENT_ID) return null;
 
@@ -21,7 +38,11 @@ export default function GoogleAnalytics() {
         src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
         strategy="afterInteractive"
       />
-      <Script id="ga-init" strategy="afterInteractive">
+      <Script
+        id="ga-init"
+        strategy="afterInteractive"
+        onReady={() => sendIfUntracked(pathnameRef.current)}
+      >
         {`
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}

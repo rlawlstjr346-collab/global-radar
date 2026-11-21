@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { getLocalizedCountryNamesMap } from "@/lib/i18n/countryNames";
 import { isSupportedLanguage } from "@/lib/i18n/locales";
 import { resolveRequestHomeCountry } from "@/lib/i18n/resolveRequestHomeCountry";
 import HomeClient from "./HomeClient";
@@ -16,6 +17,13 @@ export default async function LocalePage({ params }: LocalePageProps) {
   if (!isSupportedLanguage(locale)) notFound();
 
   const homeCountry = await resolveRequestHomeCountry();
+  const localizedCountryNames = getLocalizedCountryNamesMap(locale);
 
-  return <HomeClient homeCountry={homeCountry} uiLanguage={locale} />;
+  return (
+    <HomeClient
+      homeCountry={homeCountry}
+      uiLanguage={locale}
+      localizedCountryNames={localizedCountryNames}
+    />
+  );
 }
