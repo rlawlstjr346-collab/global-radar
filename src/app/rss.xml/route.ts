@@ -55,7 +55,7 @@ export async function GET() {
     <title>World Vintage Atlas — 글로벌 빈티지샵 · 로컬 중고앱 디깅 아틀라스</title>
     <link>${escapeXml(SITE_URL)}</link>
     <atom:link href="${escapeXml(`${SITE_URL}/rss.xml`)}" rel="self" type="application/rss+xml" />
-    <description>${escapeXml(`${bootstrap.meta.countries}개국 오프라인 빈티지샵 ${bootstrap.meta.shops.toLocaleString()}곳, 로컬 중고앱 ${bootstrap.meta.platforms}곳, 핵심 골목 ${bootstrap.meta.alleys}곳, 플리마켓 ${bootstrap.meta.events}곳.`)}</description>
+    <description>${escapeXml(`${bootstrap.meta.countries}개국 오프라인 빈티지샵 ${bootstrap.meta.shops.toLocaleString()}곳, 로컬 중고앱 ${bootstrap.meta.platforms}곳, 핵심 골목 ${bootstrap.meta.alleys}곳, 플리마켓 ${bootstrap.events.length}곳.`)}</description>
     <language>ko</language>
     <lastBuildDate>${pubDate}</lastBuildDate>
 ${[...cityItems, ...eventItems].join("\n")}

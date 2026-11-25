@@ -33,6 +33,7 @@ jobs:
         run: npm test
 
       - name: Commit only when the event list itself changed
+        id: commit
         run: |
           git show HEAD:public/data/live-events.json > "$RUNNER_TEMP/previous.json"
           if node -e 'const a=require(process.argv[1]).events,b=require("./public/data/live-events.json").events;process.exit(JSON.stringify(a)===JSON.stringify(b)?0:1)' "$RUNNER_TEMP/previous.json"; then
@@ -44,3 +45,11 @@ jobs:
           git add public/data/live-events.json
           git commit -m "chore(data): sync live vintage events"
           git push
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Ping IndexNow (Naver, IndexNow hub, Bing) after a data update
+        if: steps.commit.outputs.pushed == 'true'
+        continue-on-error: true
+        run: |
+          sleep 120 # give the Vercel deployment time to go live
+          node scripts/ping-indexnow.mjs

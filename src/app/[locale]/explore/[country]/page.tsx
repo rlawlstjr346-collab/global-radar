@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { readAtlasBootstrapSync } from "@/lib/atlasData";
 import { DEFAULT_LANGUAGE, isSupportedLanguage, SUPPORTED_LANGUAGES } from "@/lib/i18n/locales";
-import { SITE_URL } from "@/lib/siteUrl";
+import { SITE_URL, RSS_ALTERNATE_TYPES } from "@/lib/siteUrl";
 import HomeClient from "../../HomeClient";
 
 export const instant = false;
@@ -54,6 +54,7 @@ export async function generateMetadata({ params }: ExploreCountryPageProps): Pro
     description,
     alternates: {
       canonical: `/${resolved.locale}/explore/${slug}`,
+      types: RSS_ALTERNATE_TYPES,
       languages: {
         ...Object.fromEntries(
           SUPPORTED_LANGUAGES.map((lang) => [lang, `/${lang}/explore/${slug}`]),
