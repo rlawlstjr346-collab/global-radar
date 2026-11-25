@@ -1,0 +1,46 @@
+name: Sync live vintage events
+
+on:
+  schedule:
+    - cron: "0 3 * * 1,4" # Mon & Thu 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-live-events
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Fetch Luma vintage / flea markets and merge curated markets
+        run: node scripts/sync-live-events.mjs
+
+      - name: Contract tests (no expired, off-topic or emoji events)
+        run: npm test
+
+      - name: Commit only when the event list itself changed
+        run: |
+          git show HEAD:public/data/live-events.json > "$RUNNER_TEMP/previous.json"
+          if node -e 'const a=require(process.argv[1]).events,b=require("./public/data/live-events.json").events;process.exit(JSON.stringify(a)===JSON.stringify(b)?0:1)' "$RUNNER_TEMP/previous.json"; then
+            echo "Events unchanged (only timestamps moved) - nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/data/live-events.json
+          git commit -m "chore(data): sync live vintage events"
+          git push
