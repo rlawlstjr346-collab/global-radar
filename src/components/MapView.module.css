@@ -1,35 +1,103 @@
-.fallback {
+.mapShell {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  /* Dark studio backlight behind the globe (monochrome, no stars) */
+  background: radial-gradient(circle at 56% 50%, #181b24 0%, #0e1016 48%, #07080b 100%);
+  overflow: hidden;
+  z-index: 1;
+}
+
+.canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.errorState {
   position: absolute;
   inset: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: #f4f5f7;
-  padding: 24px;
-  padding-left: calc(var(--sidebar-w, clamp(380px, 26vw, 440px)) + 24px);
+  gap: 6px;
+  background: #090a0d;
+  color: #f4f3ee;
   text-align: center;
+  padding: 24px;
 }
 
-.fallbackCard {
-  max-width: 360px;
-}
-
-.fallbackTitle {
+.errorTitle {
   font-size: 16px;
-  font-weight: 700;
-  color: #171717;
-  margin-bottom: 6px;
+  font-weight: 600;
 }
 
-.fallbackBody {
+.errorBody {
   font-size: 13px;
-  line-height: 1.5;
-  color: #595959;
+  color: #a1a1aa;
 }
 
-@media (max-width: 768px) {
-  .fallback {
-    padding-left: 24px;
-    padding-top: calc(var(--mobile-sheet-h, 58dvh) + 24px);
+/* Monochrome Spot Hover / Selected Capsule */
+.spotCapsule {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 11px;
+  border-radius: 9999px;
+  border: 1.5px solid #111111;
+  background: #ffffff;
+  color: #111111;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.24);
+  z-index: 35;
+}
+
+.spotCapsuleSelected {
+  background: #111111;
+  border-color: #ffffff;
+  color: #ffffff;
+}
+
+/* Live market sonar: two staggered rings, transform/opacity only (compositor thread) */
+.eventSonar {
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  pointer-events: none;
+  /* no `position` here: MapLibre's .maplibregl-marker must stay position:absolute */
+}
+
+.eventSonar::before,
+.eventSonar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1.5px solid rgba(16, 185, 129, 0.75);
+  background: rgba(16, 185, 129, 0.12);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: eventSonarRing 2.6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  animation-delay: var(--sonar-delay, 0s);
+}
+
+.eventSonar::after {
+  animation-delay: calc(var(--sonar-delay, 0s) - 1.3s);
+}
+
+@keyframes eventSonarRing {
+  0% {
+    transform: scale(0.55);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(2.9);
+    opacity: 0;
   }
 }

@@ -1,29 +1,38 @@
 import type { MetadataRoute } from "next";
-import { COUNTRY_POINTS } from "@/data/countries";
-import { platformsForCountry } from "@/data/platforms";
+import { readAtlasBootstrapSync } from "@/lib/atlasData";
 import { SUPPORTED_LANGUAGES } from "@/lib/i18n/locales";
 import { SITE_URL as BASE_URL } from "@/lib/siteUrl";
 
-const LANDABLE_COUNTRY_SLUGS = COUNTRY_POINTS.filter((c) => platformsForCountry(c.code).length > 0).map(
-  (c) => c.code.toLowerCase(),
-);
+const PRIMARY_SEO_LOCALES = ["ko", "en", "ja"] as const;
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const lastModified = new Date();
+  const bootstrap = readAtlasBootstrapSync();
+  const lastModified = new Date(bootstrap.meta.generatedAt || Date.now());
 
   const homePages: MetadataRoute.Sitemap = SUPPORTED_LANGUAGES.map((locale) => ({
     url: `${BASE_URL}/${locale}`,
     lastModified,
     changeFrequency: "weekly",
-    priority: locale === "en" ? 1 : 0.8,
+    priority: locale === "ko" || locale === "en" ? 1.0 : 0.8,
   }));
 
-  const countryPages: MetadataRoute.Sitemap = SUPPORTED_LANGUAGES.flatMap((locale) =>
-    LANDABLE_COUNTRY_SLUGS.map((countrySlug) => ({
-      url: `${BASE_URL}/${locale}/${countrySlug}`,
+  const countryPages: MetadataRoute.Sitemap = PRIMARY_SEO_LOCALES.flatMap((locale) =>
+    bootstrap.countries.map((c) => ({
+      url: `${BASE_URL}/${locale}/explore/${c.code.toLowerCase()}`,
       lastModified,
       changeFrequency: "weekly" as const,
-      priority: 0.6,
+      priority: 0.75,
+    })),
+  );
+
+  // Top 120 digging cities by shop density (including all 24 curated sanctuary cities)
+  const topCities = bootstrap.cities.slice(0, 120);
+  const cityPages: MetadataRoute.Sitemap = PRIMARY_SEO_LOCALES.flatMap((locale) =>
+    topCities.map((city) => ({
+      url: `${BASE_URL}/${locale}/explore/${city.slug}`,
+      lastModified,
+      changeFrequency: "weekly" as const,
+      priority: city.curated ? 0.9 : 0.7,
     })),
   );
 
@@ -36,5 +45,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
   ];
 
-  return [...homePages, ...countryPages, ...privacyPage];
+  return [...homePages, ...countryPages, ...cityPages, ...privacyPage];
 }

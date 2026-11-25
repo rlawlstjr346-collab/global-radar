@@ -1,96 +1,73 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { COUNTRY_POINTS } from "@/data/countries";
-import { platformsForCountry, type CountryCode } from "@/data/platforms";
-import { getCountryPageSeo } from "@/lib/i18n/countryPageSeo";
-import { getLocalizedCountryName, getLocalizedCountryNamesMap } from "@/lib/i18n/countryNames";
+import { readAtlasBootstrapSync } from "@/lib/atlasData";
 import { DEFAULT_LANGUAGE, isSupportedLanguage, SUPPORTED_LANGUAGES } from "@/lib/i18n/locales";
-import { getBrandName } from "@/lib/i18n/uiStrings";
+import { SITE_URL } from "@/lib/siteUrl";
 import HomeClient from "../HomeClient";
 
-// Only countries that actually have at least one platform get a landing
-// page — matches the sidebar's own filter, so no page links to an empty
-// section.
-const LANDABLE_COUNTRIES = COUNTRY_POINTS.filter((c) => platformsForCountry(c.code).length > 0);
-
-// Reads route params directly (needed to resolve the country before first
-// paint), so this route can't be statically prerendered — same reasoning
-// as src/app/[locale]/page.tsx.
 export const instant = false;
-
-export function generateStaticParams() {
-  return LANDABLE_COUNTRIES.map((c) => ({ country: c.code.toLowerCase() }));
-}
 
 interface CountryPageProps {
   params: Promise<{ locale: string; country: string }>;
 }
 
-function resolveParams(locale: string, countrySlug: string) {
+function resolveCountry(locale: string, countrySlug: string) {
   if (!isSupportedLanguage(locale)) return null;
-  const code = countrySlug.toUpperCase() as CountryCode;
-  const point = LANDABLE_COUNTRIES.find((c) => c.code === code);
-  if (!point) return null;
-  return { locale, point };
+  const bootstrap = readAtlasBootstrapSync();
+  const code = countrySlug.toUpperCase();
+  const country = bootstrap.countries.find((c) => c.code === code);
+  if (!country) return null;
+  return { locale, country, bootstrap };
 }
 
 export async function generateMetadata({ params }: CountryPageProps): Promise<Metadata> {
   const { locale, country } = await params;
-  const resolved = resolveParams(locale, country);
+  const resolved = resolveCountry(locale, country);
   if (!resolved) return {};
 
-  const countryName = getLocalizedCountryName(resolved.point.code, resolved.locale);
-  const platformNames = platformsForCountry(resolved.point.code)
+  const { country: c, bootstrap } = resolved;
+  const slug = c.code.toLowerCase();
+  const apps = bootstrap.platforms
+    .filter((p) => p.country === c.code)
     .slice(0, 3)
     .map((p) => p.name)
     .join(", ");
-  const seo = getCountryPageSeo(resolved.locale);
-  const brandName = getBrandName(resolved.locale);
-  const countrySlug = resolved.point.code.toLowerCase();
-  const fullTitle = `${seo.title(countryName)} | ${brandName}`;
-  const description = seo.description(countryName, platformNames);
+
+  const title =
+    resolved.locale === "ko"
+      ? `${c.nameKo} 빈티지샵 지도 (${c.shopCount.toLocaleString()}곳) · 로컬 중고앱 | World Vintage Atlas`
+      : `${c.nameEn} Vintage Shops (${c.shopCount.toLocaleString()}) & Local Secondhand Apps | World Vintage Atlas`;
+
+  const description =
+    resolved.locale === "ko"
+      ? `${c.nameKo} 오프라인 빈티지샵 ${c.shopCount.toLocaleString()}곳, 골목 ${c.alleyCount}곳${apps ? `, 로컬 중고앱 ${apps}` : ""} 통합 디깅 아틀라스.`
+      : `Explore ${c.shopCount.toLocaleString()} offline vintage shops, ${c.alleyCount} alleys${apps ? `, and local secondhand apps (${apps})` : ""} in ${c.nameEn}.`;
 
   return {
-    title: fullTitle,
+    title,
     description,
     alternates: {
-      canonical: `/${resolved.locale}/${countrySlug}`,
+      canonical: `${SITE_URL}/${resolved.locale}/explore/${slug}`,
       languages: {
         ...Object.fromEntries(
-          SUPPORTED_LANGUAGES.map((lang) => [lang, `/${lang}/${countrySlug}`]),
+          SUPPORTED_LANGUAGES.map((lang) => [lang, `/${lang}/explore/${slug}`]),
         ),
-        "x-default": `/${DEFAULT_LANGUAGE}/${countrySlug}`,
+        "x-default": `/${DEFAULT_LANGUAGE}/explore/${slug}`,
       },
-    },
-    openGraph: {
-      title: fullTitle,
-      description,
-      type: "website",
-      siteName: brandName,
-      locale: resolved.locale,
-      url: `/${resolved.locale}/${countrySlug}`,
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: fullTitle,
-      description,
     },
   };
 }
 
 export default async function CountryPage({ params }: CountryPageProps) {
   const { locale, country } = await params;
-  const resolved = resolveParams(locale, country);
+  const resolved = resolveCountry(locale, country);
   if (!resolved) notFound();
-
-  const localizedCountryNames = getLocalizedCountryNamesMap(resolved.locale);
 
   return (
     <HomeClient
-      homeCountry={resolved.point.code}
+      bootstrap={resolved.bootstrap}
       uiLanguage={resolved.locale}
-      localizedCountryNames={localizedCountryNames}
-      initialFocusedCountry={resolved.point.code}
+      initialCountry={resolved.country.code}
     />
   );
 }

@@ -10,13 +10,13 @@
     "test": "node --import ./tests/ts-loader.mjs --test tests/*.test.mjs"
   },
   "dependencies": {
-    "mapbox-gl": "^3.35.0",
+    "framer-motion": "^14.14.0",
+    "maplibre-gl": "^6.19.0",
     "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
   "devDependencies": {
-    "@types/mapbox-gl": "^3.4.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

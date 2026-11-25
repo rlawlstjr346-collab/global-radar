@@ -4,6 +4,6 @@ import { SITE_URL as BASE_URL } from "@/lib/siteUrl";
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: { userAgent: "*", allow: "/" },
-    sitemap: `${BASE_URL}/sitemap.xml`,
+    sitemap: [`${BASE_URL}/sitemap.xml`, `${BASE_URL}/rss.xml`],
   };
 }

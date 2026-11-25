@@ -1,12 +1,11 @@
-/** The brand mark: the same pink map pin used for the favicon and map pins. */
+/** Monochrome geometric atlas emblem (1.5px architectural stroke). */
 export default function LogoMark({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 48 48" className={className} aria-hidden="true">
-      <path
-        d="M24 4C15.164 4 8 11.164 8 20c0 11.5 16 24 16 24s16-12.5 16-24c0-8.836-7.164-16-16-16z"
-        fill="#FF3C5C"
-      />
-      <circle cx="24" cy="20" r="6.5" fill="#ffffff" />
+    <svg viewBox="0 0 24 24" className={className} fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9.25" stroke="currentColor" strokeWidth="1.5" />
+      <ellipse cx="12" cy="12" rx="4.5" ry="9.25" stroke="currentColor" strokeWidth="1.25" />
+      <line x1="2.75" y1="12" x2="21.25" y2="12" stroke="currentColor" strokeWidth="1.25" />
+      <circle cx="12" cy="12" r="2" fill="currentColor" />
     </svg>
   );
 }

@@ -3,7 +3,7 @@ import Link from "next/link";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | World Secondhand Market Map",
+  title: "Privacy Policy | World Vintage Atlas",
 };
 
 export default function PrivacyPage() {
@@ -18,49 +18,23 @@ export default function PrivacyPage() {
       <div className={styles.section}>
         <h2 className={styles.heading}>What this site does</h2>
         <p>
-          World Secondhand Market Map is a directory. For every search you enter, it builds a link to
-          that item&apos;s search-results page on secondhand marketplaces around the world, and sends you
-          there. This site never stores, scrapes, or mirrors any listing data — the results you see always
-          come directly from the marketplace you&apos;re redirected to.
+          World Vintage Atlas is a global directory of offline vintage clothing shops, flea markets,
+          and local secondhand marketplaces across 137 countries. For online searches, it builds a
+          direct link to each platform&apos;s own search-results page without scraping or mirroring
+          external listing data.
         </p>
       </div>
 
       <div className={styles.section}>
-        <h2 className={styles.heading}>Cookies we use</h2>
+        <h2 className={styles.heading}>Local storage &amp; cookies</h2>
         <p>
-          <strong>Functional cookies.</strong> This site uses a small number of cookies to remember your
-          selected language and home country (e.g. from the &quot;use my location&quot; button), so the
-          marketplace list is sorted the way you left it. These are required for the site to work and are
-          not subject to a consent prompt.
+          <strong>Functional storage.</strong> Saved spots are stored locally in your browser
+          (localStorage). Language preference is stored in a functional cookie.
         </p>
         <p>
-          <strong>Analytics cookies.</strong> This site uses Google Analytics 4 to understand overall usage
-          — which pages are viewed and which marketplace links are clicked — so we can improve the site and
-          fix broken links. If you are visiting from the EU, this site asks for your consent before loading
-          Google Analytics; declining disables it entirely for your visit. Outside the EU, Google Analytics
-          loads automatically, the same way most sites operate.
-        </p>
-      </div>
-
-      <div className={styles.section}>
-        <h2 className={styles.heading}>What Google Analytics collects</h2>
-        <p>
-          When enabled, Google Analytics records page views and which marketplace links you click
-          (platform, country, and language — no personal information such as your name, email, or search
-          history is collected or stored by this site). This data is processed by Google under its own{" "}
-          <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">
-            privacy policy
-          </a>
-          .
-        </p>
-      </div>
-
-      <div className={styles.section}>
-        <h2 className={styles.heading}>Your choices</h2>
-        <p>
-          You can withdraw analytics consent at any time by clearing your browser&apos;s site data for this
-          domain — the consent banner will then ask again on your next visit. You can also use your
-          browser&apos;s privacy settings to block cookies entirely.
+          <strong>Analytics cookies.</strong> When enabled (with explicit consent for EU visitors),
+          Google Analytics 4 measures aggregate page views and outbound link clicks without storing
+          personal information.
         </p>
       </div>
 

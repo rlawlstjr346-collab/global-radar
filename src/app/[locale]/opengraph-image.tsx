@@ -1,7 +1,6 @@
 import { ImageResponse } from "next/og";
 import { connection } from "next/server";
 import { DEFAULT_LANGUAGE, isSupportedLanguage, type LanguageCode } from "@/lib/i18n/locales";
-import { getUiStrings } from "@/lib/i18n/uiStrings";
 
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
@@ -23,11 +22,6 @@ const NON_LATIN_FONT_FAMILY: Partial<Record<LanguageCode, string>> = {
   el: "Noto Sans",
 };
 
-/**
- * Fetches a minimal Google Fonts TTF subset containing only the characters
- * rendered in this OG image, with a strict 2.5s timeout so slow/offline
- * environments safely fall back instead of hanging or emitting tofu boxes.
- */
 async function loadSubsetFont(family: string, text: string): Promise<ArrayBuffer | null> {
   const uniqueChars = Array.from(new Set(text)).join("");
   const cssUrl =
@@ -37,7 +31,6 @@ async function loadSubsetFont(family: string, text: string): Promise<ArrayBuffer
   try {
     const cssRes = await fetch(cssUrl, {
       signal: AbortSignal.timeout(2500),
-      // Legacy Safari UA asks Google Fonts for a direct .ttf (Satori does not support woff2).
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_6_8; de-at) AppleWebKit/533.21.1 (KHTML, like Gecko) Version/5.0.5 Safari/533.21.1",
@@ -66,16 +59,21 @@ export default async function Image({ params }: OgImageProps) {
   await connection();
   const { locale } = await params;
   const lang = isSupportedLanguage(locale) ? locale : DEFAULT_LANGUAGE;
-  const localized = getUiStrings(lang);
+
+  const isKo = lang === "ko";
+  const isJa = lang === "ja";
+  const subtitle = isKo
+    ? "137개국 · 13,054 빈티지샵 · 136 로컬 중고앱 · 664 골목"
+    : isJa
+      ? "137か国 · 13,054 古着屋 · 136 中古アプリ · 664 エリア"
+      : "137 Countries · 13,054 Vintage Shops · 136 Local Apps · 664 Alleys";
 
   const fontFamily = NON_LATIN_FONT_FAMILY[lang];
-  const fullText = `${localized.brand.before}${localized.brand.accent}${localized.brand.after}${localized.titleDetail}`;
-  const fontData = fontFamily ? await loadSubsetFont(fontFamily, fullText) : null;
-
-  // If a non-Latin locale failed to fetch its webfont (e.g. timeout), safely
-  // fall back to English copy so Satori never renders missing-glyph tofu boxes.
-  const t = fontFamily && !fontData ? getUiStrings(DEFAULT_LANGUAGE) : localized;
+  const fontData = fontFamily ? await loadSubsetFont(fontFamily, `WORLD VINTAGE ATLAS ${subtitle}`) : null;
   const activeFontName = fontData && fontFamily ? fontFamily : "sans-serif";
+  const displaySubtitle = fontFamily && !fontData
+    ? "137 Countries · 13,054 Vintage Shops · 136 Local Apps · 664 Alleys"
+    : subtitle;
 
   return new ImageResponse(
     (
@@ -85,52 +83,77 @@ export default async function Image({ params }: OgImageProps) {
           height: "100%",
           display: "flex",
           flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "0 64px",
-          backgroundColor: "#fff5f6",
+          justifyContent: "space-between",
+          padding: "64px 72px",
+          backgroundColor: "#F6F6F4",
+          color: "#18181B",
           fontFamily: activeFontName,
         }}
       >
-        <svg width="140" height="140" viewBox="0 0 48 48" style={{ marginBottom: 28 }}>
-          <path
-            d="M24 4C15.164 4 8 11.164 8 20c0 11.5 16 24 16 24s16-12.5 16-24c0-8.836-7.164-16-16-16z"
-            fill="#FF3C5C"
-          />
-          <circle cx="24" cy="20" r="6.5" fill="#ffffff" />
-        </svg>
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            justifyContent: "center",
-            fontSize: 64,
-            fontWeight: 700,
-            color: "#171717",
-            textAlign: "center",
-          }}
-        >
-          <span>{t.brand.before}</span>
-          <span style={{ color: "#FF3C5C" }}>{t.brand.accent}</span>
-          <span>{t.brand.after}</span>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <svg width="42" height="42" viewBox="0 0 48 48" fill="none">
+              <rect width="48" height="48" rx="12" fill="#18181B" />
+              <circle cx="24" cy="24" r="13" stroke="#FFFFFF" strokeWidth="2.2" />
+              <ellipse cx="24" cy="24" rx="6.5" ry="13" stroke="#FFFFFF" strokeWidth="1.8" />
+              <line x1="11" y1="24" x2="37" y2="24" stroke="#FFFFFF" strokeWidth="1.8" />
+            </svg>
+            <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.03em" }}>
+              WORLD VINTAGE ATLAS
+            </span>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              padding: "8px 18px",
+              borderRadius: 9999,
+              backgroundColor: "#18181B",
+              color: "#FFFFFF",
+              fontSize: 18,
+              fontWeight: 600,
+              letterSpacing: "0.06em",
+            }}
+          >
+            WORLDVINTAGEMAP.COM
+          </div>
         </div>
-        <div
-          style={{
-            marginTop: 20,
-            fontSize: 30,
-            color: "#555555",
-            textAlign: "center",
-          }}
-        >
-          {t.titleDetail}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          <div style={{ fontSize: 64, fontWeight: 700, letterSpacing: "-0.04em", lineHeight: 1.06 }}>
+            Global Digging Atlas
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 500, color: "#52525B", letterSpacing: "-0.015em" }}>
+            {displaySubtitle}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 12 }}>
+          {["JP TOKYO", "KR SEOUL", "FR PARIS", "GB LONDON", "US NYC", "DE BERLIN"].map((tag) => (
+            <div
+              key={tag}
+              style={{
+                display: "flex",
+                padding: "8px 16px",
+                borderRadius: 9999,
+                backgroundColor: "#FFFFFF",
+                border: "1px solid rgba(0,0,0,0.12)",
+                fontSize: 16,
+                fontWeight: 600,
+                color: "#18181B",
+              }}
+            >
+              {tag}
+            </div>
+          ))}
         </div>
       </div>
     ),
     {
       ...size,
-      fonts: fontData && fontFamily
-        ? [{ name: fontFamily, data: fontData, weight: 700, style: "normal" }]
-        : undefined,
+      fonts:
+        fontData && fontFamily
+          ? [{ name: fontFamily, data: fontData, weight: 700, style: "normal" }]
+          : undefined,
     },
   );
 }

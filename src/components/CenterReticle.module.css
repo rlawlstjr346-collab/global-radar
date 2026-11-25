@@ -1,0 +1,61 @@
+.root {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 12;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.48;
+  transition: opacity 180ms ease;
+}
+
+.snapping {
+  opacity: 0.85;
+}
+
+.svg {
+  width: clamp(28px, 1.8vw, 40px);
+  height: clamp(28px, 1.8vw, 40px);
+  fill: none;
+  overflow: visible;
+}
+
+.haloCircle {
+  stroke: rgba(17, 17, 17, 0.45);
+  stroke-width: 2.6px;
+}
+
+.mainCircle {
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-width: 1.2px;
+}
+
+.dashed {
+  stroke-dasharray: 6 5;
+  transform-origin: 50% 50%;
+  animation: spinCue 3.6s linear infinite;
+}
+
+.cross {
+  stroke: rgba(255, 255, 255, 0.72);
+  stroke-width: 1px;
+  stroke-linecap: round;
+}
+
+@keyframes spinCue {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashed {
+    animation: none;
+  }
+}
