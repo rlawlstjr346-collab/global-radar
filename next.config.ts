@@ -12,6 +12,8 @@ const SECURITY_HEADERS = [
 ];
 
 const nextConfig: NextConfig = {
+  // Always defined so the test-only camera hook is constant-folded out of normal builds.
+  env: { NEXT_PUBLIC_ATLAS_E2E: process.env.NEXT_PUBLIC_ATLAS_E2E === "1" ? "1" : "0" },
   cacheComponents: true,
   partialPrefetching: true,
   async headers() {

@@ -15,6 +15,7 @@ import { resolveAlleyDisplay } from "@/lib/alleyZones";
 import type { LanguageCode } from "@/lib/i18n/locales";
 import type { ReticleState } from "./CenterReticle";
 import styles from "./MapView.module.css";
+import GlobeCallouts from "./GlobeCallouts";
 
 // CARTO Positron GL public basemap; its OpenStreetMap + CARTO attribution is kept by the attribution control
 const POSITRON_STYLE_URL = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
@@ -74,16 +75,15 @@ interface MapViewProps {
   }) => void;
 }
 
-function prefersReducedMotion(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
 /** Single source of camera physics. Every move is `essential` so the OS reduced-motion
  * flag can never silently degrade a glide into a 0 ms teleport. */
 const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 const easeOutQuart = (t: number) => 1 - Math.pow(1 - t, 4);
 const GLOBE_RESET_CENTER: [number, number] = [128, 34];
+const SPIN_DEG_PER_SEC = 2.2;
+const SPIN_AIM_FACTOR = 0.15; // cursor on a hub callout only
+const SPIN_IDLE_RESUME_MS = 1200; // after a real input (drag / touch / wheel / dblclick / flight)
+const SPIN_RAMP_MS = 600;
 
 /** Distance-proportional flight time: short hops ~1100 ms, cross-world flights cap at 1450 ms. */
 function flightDuration(from: maplibregl.LngLat, to: [number, number], fromZoom: number, toZoom: number): number {
@@ -241,12 +241,14 @@ function applyUnifiedVectorMonochromeSkin(map: maplibregl.Map): {
 
     if (layer.type === "background") {
       // Globe zooms: the floor under not-yet-loaded tiles is the ocean, never a white square.
+      // Dark until z4.1 (no white flash while spinning), then the land floor is fully bright
+      // by z4.8 - before the globe overlay starts dissolving at z4.9.
       safePaint(map, id, "background-color", [
-        "interpolate", ["linear"], ["zoom"], 5.0, CARTO.oceanGlobe, 5.6, CARTO.land,
+        "interpolate", ["linear"], ["zoom"], 4.1, CARTO.oceanGlobe, 4.2, "#ECEBE6", 4.8, CARTO.land,
       ]);
     } else if (id === "water") {
       safePaint(map, id, "fill-color", [
-        "interpolate", ["linear"], ["zoom"], 4.8, CARTO.oceanGlobe, 5.5, CARTO.water,
+        "interpolate", ["linear"], ["zoom"], 4.9, CARTO.oceanGlobe, 6.3, CARTO.water,
       ]);
     } else if (id === "waterway") {
       safePaint(map, id, "line-color", CARTO.water);
@@ -315,19 +317,55 @@ function applyUnifiedVectorMonochromeSkin(map: maplibregl.Map): {
 }
 
 /**
- * Macro globe land: one warm alabaster #ECEBE6 for every country; only the hovered
- * or selected country lifts to pure #FFFFFF (with a #18181B outline layer).
+ * Macro globe land: a micro dot-matrix on warm alabaster (#ECEBE6); the hovered or selected
+ * country switches to the brighter white matrix (with a #111111 outline layer).
  */
-function buildGlobeChoroplethFillExpression(
+function buildGlobeChoroplethPatternExpression(
   locked: string,
   hovered: string | null,
 ): maplibregl.ExpressionSpecification {
   return [
     "case",
     ["in", ["get", "ISO_A2"], ["literal", [locked, hovered || "__NONE__"]]],
-    "#FFFFFF",
-    "#ECEBE6",
+    "land-dot-active",
+    "land-dot-base",
   ];
+}
+
+/** 12x12 css-px tile rendered at 2x for retina: solid ground + one centred micro dot. */
+function createDotMatrixTile(ground: string, dot: string, radius: number) {
+  if (typeof document === "undefined") return null;
+  const ratio = 2;
+  const size = 12 * ratio;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.fillStyle = ground;
+  ctx.fillRect(0, 0, size, size);
+  ctx.fillStyle = dot;
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, radius * ratio, 0, Math.PI * 2);
+  ctx.fill();
+  const img = ctx.getImageData(0, 0, size, size);
+  return { width: size, height: size, data: new Uint8Array(img.data.buffer) };
+}
+
+/** 15deg meridians (lat +-75) and parallels; dense vertices so lines follow the sphere. */
+function buildGraticule(): GeoJSON.FeatureCollection<GeoJSON.LineString> {
+  const features: GeoJSON.Feature<GeoJSON.LineString>[] = [];
+  for (let lng = -180; lng <= 180; lng += 15) {
+    const coords: [number, number][] = [];
+    for (let lat = -75; lat <= 75; lat += 2.5) coords.push([lng, lat]);
+    features.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } });
+  }
+  for (let lat = -75; lat <= 75; lat += 15) {
+    const coords: [number, number][] = [];
+    for (let lng = -180; lng <= 180; lng += 2.5) coords.push([lng, lat]);
+    features.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } });
+  }
+  return { type: "FeatureCollection", features };
 }
 
 export default function MapView({
@@ -364,6 +402,7 @@ export default function MapView({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
   const [mapError, setMapError] = useState(false);
   const hoveredCountryRef = useRef<string | null>(null);
 
@@ -372,8 +411,8 @@ export default function MapView({
   const pointerDownPosRef = useRef<{ x: number; y: number } | null>(null);
   const draggedDistanceRef = useRef(0);
   const flightRef = useRef<"idle" | "snap" | "direct">("idle");
-  const idleSpinActiveRef = useRef(true);
-  const idleSpinRafRef = useRef<number | null>(null);
+  // Orbital spin state: factor ramps toward a target multiplier of SPIN_DEG_PER_SEC.
+  const spinRef = useRef({ factor: 0, lastInput: -Infinity, aim: false, raf: null as number | null });
   const highlightMarkerRef = useRef<maplibregl.Marker | null>(null);
   const sonarMarkersRef = useRef<maplibregl.Marker[]>([]);
 
@@ -521,6 +560,8 @@ export default function MapView({
     [events],
   );
 
+  const eventCitySlugs = useMemo(() => new Set(events.map((ev) => ev.citySlug)), [events]);
+
   const pinById = useMemo(() => {
     const map = new Map<string, CompactPinTuple>();
     for (const p of pins) map.set(p[0], p);
@@ -531,8 +572,8 @@ export default function MapView({
     if (map.getLayer("atlas-countries-fill")) {
       map.setPaintProperty(
         "atlas-countries-fill",
-        "fill-color",
-        buildGlobeChoroplethFillExpression(locked, hovered),
+        "fill-pattern",
+        buildGlobeChoroplethPatternExpression(locked, hovered),
       );
     }
     if (map.getLayer("atlas-country-hover-border")) {
@@ -582,39 +623,55 @@ export default function MapView({
     const mobileSheetPad = computeMobileSheetPadding();
     if (mobileSheetPad > 0) map.setPadding({ top: 0, right: 0, bottom: mobileSheetPad, left: 0 });
 
+    /** Any deliberate input (drag, click, wheel, camera command) halts the spin at once. */
     const stopIdleSpin = () => {
-      idleSpinActiveRef.current = false;
-      if (idleSpinRafRef.current !== null) {
-        cancelAnimationFrame(idleSpinRafRef.current);
-        idleSpinRafRef.current = null;
-      }
+      spinRef.current.factor = 0;
+      spinRef.current.lastInput = performance.now();
     };
 
+    const spinMaxZoom = Math.max(5.0, initialZoom + 1.0);
+
+    /** Resume immediately (after a globe reset settles): ramps 0 -> full over SPIN_RAMP_MS.
+     *  Deliberately not gated on prefers-reduced-motion (Linux Chromium reports "reduce"). */
     const startIdleSpin = () => {
-      if (prefersReducedMotion()) return;
-      idleSpinActiveRef.current = true;
-      if (idleSpinRafRef.current !== null) return;
+      spinRef.current.lastInput = -Infinity;
+      if (spinRef.current.raf !== null) return;
       let lastTs = performance.now();
+      let lastTelemetry = 0;
       const spin = (ts: number) => {
-        if (!idleSpinActiveRef.current || !mapRef.current) {
-          idleSpinRafRef.current = null;
+        if (!mapRef.current) {
+          spinRef.current.raf = null;
           return;
         }
-        const dt = Math.min(ts - lastTs, 50);
+        // Real elapsed time keeps the true speed even at a few fps (4K / software GL);
+        // a >= 1s gap means the tab was hidden, so resume from here without a jump.
+        const gap = ts - lastTs;
+        const dt = gap >= 1000 ? 0 : gap;
         lastTs = ts;
-        // Gentle 0.15 deg/sec breathing rotation at macro globe zoom (< 4.2)
-        if (
-          map.getZoom() < 4.0 &&
+        const st = spinRef.current;
+        const canSpin =
+          map.getZoom() < spinMaxZoom &&
           !latestRef.current.selectedSpotId &&
           flightRef.current === "idle" &&
-          interactionRef.current === "idle"
-        ) {
+          interactionRef.current === "idle" &&
+          ts - st.lastInput >= SPIN_IDLE_RESUME_MS;
+        const target = canSpin ? (st.aim ? SPIN_AIM_FACTOR : 1) : 0;
+        if (target === 0) st.factor = 0;
+        else if (st.factor < target) st.factor = Math.min(target, st.factor + dt / SPIN_RAMP_MS);
+        else st.factor = Math.max(target, st.factor - dt / 300);
+        if (st.factor > 0) {
           const c = map.getCenter();
-          map.jumpTo({ center: [c.lng + dt * 0.00012, c.lat] });
+          // Tagged so per-frame spin moves skip the heavy React/state callbacks.
+          map.jumpTo({ center: [c.lng + (dt / 1000) * SPIN_DEG_PER_SEC * st.factor, c.lat] }, { atlasSpin: true });
+          if (ts - lastTelemetry > 150) {
+            lastTelemetry = ts;
+            const cc = map.getCenter();
+            latestRef.current.onCenterChange([cc.lng, cc.lat]);
+          }
         }
-        idleSpinRafRef.current = requestAnimationFrame(spin);
+        st.raf = requestAnimationFrame(spin);
       };
-      idleSpinRafRef.current = requestAnimationFrame(spin);
+      spinRef.current.raf = requestAnimationFrame(spin);
     };
     startIdleSpinRef.current = startIdleSpin;
 
@@ -642,6 +699,7 @@ export default function MapView({
     };
 
     const onPointerUp = () => {
+      if (interactionRef.current === "dragging") spinRef.current.lastInput = performance.now();
       pointerDownPosRef.current = null;
       interactionRef.current = "idle";
     };
@@ -654,9 +712,6 @@ export default function MapView({
       }
     };
 
-    // Any hover over the globe pauses the ambient spin; it resumes after a globe reset settles.
-    const onHoverPause = () => stopIdleSpin();
-    container.addEventListener("mousemove", onHoverPause, { passive: true });
     container.addEventListener("pointerdown", onPointerDown, { passive: true });
     container.addEventListener("wheel", onWheel, { passive: true });
     window.addEventListener("pointermove", onPointerMoveWindow, { passive: true });
@@ -722,6 +777,13 @@ export default function MapView({
 
       const skin = applyUnifiedVectorMonochromeSkin(map);
 
+      for (const [name, ground, dot, r] of [
+        ["land-dot-base", "#ECEBE6", "rgba(24, 24, 27, 0.17)", 1.15],
+        ["land-dot-active", "#FFFFFF", "rgba(17, 17, 17, 0.24)", 1.3],
+      ] as const) {
+        const tile = createDotMatrixTile(ground, dot, r);
+        if (tile && !map.hasImage(name)) map.addImage(name, tile, { pixelRatio: 2 });
+      }
       if (!map.hasImage("sanctuary-pill")) {
         const sancImg = createSanctuaryPillImage();
         if (sancImg) {
@@ -759,8 +821,9 @@ export default function MapView({
             source: "atlas-world-countries",
             maxzoom: 6.4,
             paint: {
-              "fill-color": buildGlobeChoroplethFillExpression(latestRef.current.lockedCountry, null),
-              "fill-opacity": ["interpolate", ["linear"], ["zoom"], 4.6, 1, 5.2, 0],
+              "fill-pattern": buildGlobeChoroplethPatternExpression(latestRef.current.lockedCountry, null),
+              // Dissolves over a land floor that is already the same brightness (no dark dip)
+              "fill-opacity": ["interpolate", ["linear"], ["zoom"], 4.9, 1, 6.3, 0],
             },
           },
           skin.firstSymbolId,
@@ -776,7 +839,7 @@ export default function MapView({
             paint: {
               "line-color": "#B8B7B0",
               "line-width": 0.8,
-              "line-opacity": ["interpolate", ["linear"], ["zoom"], 4.6, 0.85, 5.2, 0],
+              "line-opacity": ["interpolate", ["linear"], ["zoom"], 4.9, 0.85, 6.3, 0],
             },
           },
           skin.firstSymbolId,
@@ -791,9 +854,9 @@ export default function MapView({
             maxzoom: 6.4,
             filter: ["==", ["get", "ISO_A2"], "__NONE__"],
             paint: {
-              "line-color": "#18181B",
+              "line-color": "#111111",
               "line-width": 1.8,
-              "line-opacity": ["interpolate", ["linear"], ["zoom"], 4.6, 0.95, 5.2, 0],
+              "line-opacity": ["interpolate", ["linear"], ["zoom"], 4.9, 0.95, 6.3, 0],
             },
           },
           skin.firstSymbolId,
@@ -808,13 +871,54 @@ export default function MapView({
             maxzoom: 6.4,
             filter: ["==", ["get", "ISO_A2"], latestRef.current.lockedCountry],
             paint: {
-              "line-color": "#18181B",
+              "line-color": "#111111",
               "line-width": 1.8,
-              "line-opacity": ["interpolate", ["linear"], ["zoom"], 4.6, 1, 5.2, 0],
+              "line-opacity": ["interpolate", ["linear"], ["zoom"], 4.9, 1, 6.3, 0],
             },
           },
           skin.firstSymbolId,
         );
+
+        // Province / state hairlines on the globe so large continents never read as blank paper
+        const boundarySrc = (map.getStyle().layers.find((l) => l.id === "boundary_county") as { source?: string } | undefined)?.source;
+        if (boundarySrc && !map.getLayer("atlas-globe-states")) {
+          map.addLayer(
+            {
+              id: "atlas-globe-states",
+              type: "line",
+              source: boundarySrc,
+              "source-layer": "boundaries",
+              minzoom: 2.6,
+              maxzoom: 6.4,
+              filter: ["==", ["get", "kind_detail"], 4],
+              paint: {
+                "line-color": "#52525B",
+                "line-width": 0.5,
+                "line-opacity": ["interpolate", ["linear"], ["zoom"], 2.6, 0.26, 4.9, 0.26, 6.3, 0],
+              },
+            },
+            skin.firstSymbolId,
+          );
+        }
+
+        // 15deg instrument graticule over the globe, gone by z5.6
+        if (!map.getSource("atlas-graticule")) {
+          map.addSource("atlas-graticule", { type: "geojson", data: buildGraticule() });
+          map.addLayer(
+            {
+              id: "atlas-graticule",
+              type: "line",
+              source: "atlas-graticule",
+              maxzoom: 5.7,
+              paint: {
+                "line-color": "rgba(255, 255, 255, 0.065)",
+                "line-width": 0.65,
+                "line-opacity": ["interpolate", ["linear"], ["zoom"], 4.5, 1, 5.6, 0],
+              },
+            },
+            skin.firstSymbolId,
+          );
+        }
       }
 
       // Tier 3A: Core Vintage Sanctuary "Soft Aura" (count >= 5 ONLY — sits cleanly below shop dots!)
@@ -993,7 +1097,7 @@ export default function MapView({
           id: "atlas-city-badges",
           type: "symbol",
           source: "atlas-city-seeds",
-          minzoom: 5.5,
+          minzoom: 5.9,
           maxzoom: 11.4,
           layout: {
             "text-field": ["get", "badgeLabel"],
@@ -1022,9 +1126,9 @@ export default function MapView({
               "interpolate",
               ["linear"],
               ["zoom"],
-              5.5,
+              5.9,
               0,
-              6.0,
+              6.3,
               1,
               10.5,
               1,
@@ -1277,6 +1381,11 @@ export default function MapView({
       });
 
       setMapReady(true);
+      setMapInstance(map);
+      if (process.env.NEXT_PUBLIC_ATLAS_E2E === "1") {
+        // Test-only camera handle; compiled out of normal production builds.
+        (window as unknown as { __ATLAS_E2E__?: maplibregl.Map }).__ATLAS_E2E__ = map;
+      }
       if (playIntro) {
         // Non-blocking, interruptible: "snap" flights are stopped by the first pointer/wheel input.
         requestAnimationFrame(() => {
@@ -1296,8 +1405,8 @@ export default function MapView({
     });
 
     let moveRaf: number | null = null;
-    map.on("move", () => {
-      if (moveRaf !== null) return;
+    map.on("move", (e: maplibregl.MapLibreEvent & { atlasSpin?: boolean }) => {
+      if (e.atlasSpin || moveRaf !== null) return;
       moveRaf = requestAnimationFrame(() => {
         moveRaf = null;
         if (!mapRef.current) return;
@@ -1307,7 +1416,9 @@ export default function MapView({
       });
     });
 
-    map.on("moveend", onMoveEnd);
+    map.on("moveend", (e: maplibregl.MapLibreEvent & { atlasSpin?: boolean }) => {
+      if (!e.atlasSpin) onMoveEnd();
+    });
 
     const zoomBy = (delta: number) => {
       stopIdleSpin();
@@ -1367,9 +1478,9 @@ export default function MapView({
     });
 
     return () => {
-      stopIdleSpin();
+      if (spinRef.current.raf !== null) cancelAnimationFrame(spinRef.current.raf);
+      spinRef.current.raf = null;
       if (moveRaf !== null) cancelAnimationFrame(moveRaf);
-      container.removeEventListener("mousemove", onHoverPause);
       container.removeEventListener("pointerdown", onPointerDown);
       container.removeEventListener("wheel", onWheel);
       window.removeEventListener("pointermove", onPointerMoveWindow);
@@ -1514,11 +1625,8 @@ export default function MapView({
 
     const isGlobeReset = cameraCommand.kind === "globe";
     if (!isGlobeReset) {
-      idleSpinActiveRef.current = false;
-      if (idleSpinRafRef.current !== null) {
-        cancelAnimationFrame(idleSpinRafRef.current);
-        idleSpinRafRef.current = null;
-      }
+      spinRef.current.factor = 0;
+      spinRef.current.lastInput = performance.now();
     }
 
     selectionModeRef.current = "click";
@@ -1559,6 +1667,16 @@ export default function MapView({
   return (
     <div className={styles.mapShell}>
       <div ref={containerRef} className={styles.canvas} />
+      <GlobeCallouts
+        map={mapInstance}
+        cities={cities}
+        eventCitySlugs={eventCitySlugs}
+        uiLanguage={uiLanguage}
+        onSelectCity={(city) => latestRef.current.onSelectCityBadge(city)}
+        onAimChange={(aiming) => {
+          spinRef.current.aim = aiming;
+        }}
+      />
       {mapError && (
         <div className={styles.errorState} role="status">
           <p className={styles.errorTitle}>3D Globe unavailable</p>
