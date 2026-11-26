@@ -48,6 +48,11 @@ export default function GlobeCallouts({
         .slice(0, HUB_COUNT),
     [cities],
   );
+  // Per-hub spherical constants, computed once: the per-frame horizon test is then one cos().
+  const hubTrig = useMemo(
+    () => hubs.map((c) => ({ sinLat: Math.sin(c.center[1] * RAD), cosLat: Math.cos(c.center[1] * RAD) })),
+    [hubs],
+  );
   const nodes = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
@@ -85,7 +90,8 @@ export default function GlobeCallouts({
         const el = nodes.current[i];
         if (!el) return;
         const [lng, lat] = city.center;
-        const cosA = sinC * Math.sin(lat * RAD) + cosC * Math.cos(lat * RAD) * Math.cos((lng - c.lng) * RAD);
+        const { sinLat, cosLat } = hubTrig[i];
+        const cosA = sinC * sinLat + cosC * cosLat * Math.cos((lng - c.lng) * RAD);
         if (cosA <= HIDE_COS || shown >= MAX_VISIBLE) return hide(el);
 
         const p = map.project([lng, lat]);
@@ -144,7 +150,7 @@ export default function GlobeCallouts({
       map.off("resize", schedule);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [map, hubs, uiLanguage]);
+  }, [map, hubs, hubTrig, uiLanguage]);
 
   return (
     <div className={styles.layer} aria-label="Vintage hubs" data-testid="globe-callouts">

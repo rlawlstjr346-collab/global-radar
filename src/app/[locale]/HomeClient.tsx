@@ -1,6 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
@@ -57,6 +66,7 @@ import {
   ShuffleIcon,
 } from "@/components/AtlasIcons";
 import type { HoveredCountryInfo, MapCameraCommand } from "@/components/MapView";
+import { createLiveValue, type LiveValue } from "@/lib/liveValue";
 import styles from "./page.module.css";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
@@ -83,6 +93,98 @@ function formatCoordTelemetry([lng, lat]: [number, number]): string {
   const lngDir = lng >= 0 ? "E" : "W";
   return `${Math.abs(lat).toFixed(1)}°${latDir} ${Math.abs(lng).toFixed(1)}°${lngDir}`;
 }
+
+/** Live camera readout: the only subscriber of the per-frame center channel. */
+function TelemetryCoordsText({ store, cc }: { store: LiveValue<[number, number]>; cc: string }) {
+  const center = useSyncExternalStore(store.subscribe, store.get, store.get);
+  return (
+    <>
+      {cc} · {formatCoordTelemetry(center)}
+    </>
+  );
+}
+
+/** Zoom state only feeds the 10 / 10.5 thresholds, so in-band moves need no re-render. */
+const zoomBand = (z: number) => (z < 10 ? 0 : z < 10.5 ? 1 : 2);
+
+interface ShopCardProps {
+  shop: AtlasShopDetail;
+  idx: number;
+  isSaved: boolean;
+  hoverStore: LiveValue<string | null>;
+  savedLabel: string;
+  walkMin: (min: number) => string;
+  onSelect: (id: string, cc: string) => void;
+  onToggleSave: (id: string) => void;
+}
+
+/** One list row. Memoised and hover-subscribed on its own id, so a hover re-renders <= 2 rows. */
+const ShopCard = memo(function ShopCard({
+  shop,
+  idx,
+  isSaved,
+  hoverStore,
+  savedLabel,
+  walkMin,
+  onSelect,
+  onToggleSave,
+}: ShopCardProps) {
+  const isHovered = useSyncExternalStore(
+    hoverStore.subscribe,
+    () => hoverStore.get() === shop.id,
+    () => false,
+  );
+  const locBadge = shop.alleyName || shop.gu || shop.cityKo;
+  const stationPart = shop.near?.nameKo || shop.near?.name;
+  const line2 = [
+    shop.address || shop.cityKo,
+    stationPart ? `${stationPart}${shop.near?.walkMin ? ` ${walkMin(shop.near.walkMin)}` : ""}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: 0.16,
+        delay: Math.min(idx * 0.016, 0.08),
+        ease: [0.23, 1, 0.32, 1],
+      }}
+      className={`${styles.spotCardCompact} ${isHovered ? styles.spotCardHovered : ""}`}
+      data-testid="spot-card"
+      onMouseEnter={() => hoverStore.set(shop.id)}
+      onMouseLeave={() => hoverStore.set(null)}
+      onClick={() => onSelect(shop.id, shop.country)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") onSelect(shop.id, shop.country);
+      }}
+    >
+      <div className={styles.spotRowMain}>
+        <span className={styles.spotNameCompact}>{shop.name}</span>
+        <div className={styles.spotRowRight}>
+          <span className={styles.locBadge}>{locBadge}</span>
+          <button
+            type="button"
+            className={`${styles.bookmarkBtn} ${isSaved ? styles.bookmarkActive : ""}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSave(shop.id);
+            }}
+            aria-label={savedLabel}
+            aria-pressed={isSaved}
+          >
+            <BookmarkIcon size={15} filled={isSaved} />
+          </button>
+        </div>
+      </div>
+      <p className={styles.spotLine2}>{line2}</p>
+    </motion.div>
+  );
+});
 
 /** Picks an ideal visual zoom for clicking into a country based on geographic span. */
 function countryClickZoom(cc: string): number {
@@ -169,7 +271,8 @@ export default function HomeClient({
   const [activeCity, setActiveCity] = useState<AtlasCity | null>(initialLock.city);
   const [selectedAlleyId, setSelectedAlleyId] = useState<string | null>(null);
   const [selectedSpotId, setSelectedSpotId] = useState<string | null>(null);
-  const [hoveredSpotId, setHoveredSpotId] = useState<string | null>(null);
+  // Hover / camera-center channels: high-frequency, read by leaves only (no page re-render).
+  const [hoverStore] = useState(() => createLiveValue<string | null>(null));
   const [hoveredCountry, setHoveredCountry] = useState<HoveredCountryInfo | null>(null);
 
   // Collapsible Single Unified Left Drawer (Apple Maps Web × Arc)
@@ -179,10 +282,29 @@ export default function HomeClient({
   const [showGlobalEvents, setShowGlobalEvents] = useState(false);
   const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [visibleCount, setVisibleCount] = useState(40);
+  // Progressive list mount: the "load more" row also auto-mounts the next 40 when it scrolls in.
+  const loadMoreObserverRef = useRef<IntersectionObserver | null>(null);
+  const loadMoreRef = useCallback((el: HTMLButtonElement | null) => {
+    loadMoreObserverRef.current?.disconnect();
+    loadMoreObserverRef.current = null;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((en) => en.isIntersecting)) setVisibleCount((c) => c + 40);
+      },
+      { root: el.closest(`.${styles.drawerScroll}`), rootMargin: "0px 0px 240px 0px" },
+    );
+    io.observe(el);
+    loadMoreObserverRef.current = io;
+  }, []);
 
   // Map telemetry & subtle reticle + live viewport sync
-  const [liveCenter, setLiveCenter] = useState<[number, number]>(initialCenter);
+  const [centerStore] = useState(() => createLiveValue<[number, number]>(initialCenter));
   const [zoom, setZoom] = useState<number>(initialCitySlug ? 12.6 : 2.55);
+  const handleZoomChange = useCallback(
+    (z: number) => setZoom((prev) => (zoomBand(prev) === zoomBand(z) ? prev : z)),
+    [],
+  );
   const [mapBounds, setMapBounds] = useState<[number, number, number, number] | null>(null);
   const [filterByViewport, setFilterByViewport] = useState<boolean>(false);
   const [sortMode, setSortMode] = useState<"curated" | "nearest" | "name">("curated");
@@ -693,11 +815,22 @@ export default function HomeClient({
       formatCityLocalClock(
         activeCity?.slug || null,
         lockedCountry,
-        activeCity?.center[0] ?? lockedCountryObj?.center[0] ?? liveCenter[0],
+        activeCity?.center[0] ?? lockedCountryObj?.center[0] ?? centerStore.get()[0],
         new Date(clockTick),
       ),
-    [activeCity, lockedCountry, lockedCountryObj, liveCenter, clockTick],
+    [activeCity, lockedCountry, lockedCountryObj, centerStore, clockTick],
   );
+
+  // One-pass country index over the 13k pins (country switches never re-scan the full list)
+  const pinsByCountry = useMemo(() => {
+    const m = new Map<string, CompactPinTuple[]>();
+    for (const p of pins) {
+      const bucket = m.get(p[2]);
+      if (bucket) bucket.push(p);
+      else m.set(p[2], [p]);
+    }
+    return m;
+  }, [pins]);
 
   // Shops filtered cleanly by Country -> City -> Alley
   const activeShops = useMemo<AtlasShopDetail[]>(() => {
@@ -708,22 +841,20 @@ export default function HomeClient({
     if (shard) {
       list = shard;
     } else {
-      list = pins
-        .filter((p) => p[2] === lockedCountry)
-        .map((p) => ({
-          id: p[0],
-          name: p[1],
-          country: p[2],
-          citySlug: p[3],
-          cityKo: p[4],
-          cityEn: p[5],
-          lng: p[6],
-          lat: p[7],
-          kind: p[8],
-          alley: p[9] || undefined,
-          alleyName: p[9] ? alleyById.get(p[9])?.name : undefined,
-          featured: p[10] === 1,
-        }));
+      list = (pinsByCountry.get(lockedCountry) ?? []).map((p) => ({
+        id: p[0],
+        name: p[1],
+        country: p[2],
+        citySlug: p[3],
+        cityKo: p[4],
+        cityEn: p[5],
+        lng: p[6],
+        lat: p[7],
+        kind: p[8],
+        alley: p[9] || undefined,
+        alleyName: p[9] ? alleyById.get(p[9])?.name : undefined,
+        featured: p[10] === 1,
+      }));
     }
 
     return list.filter((s) => {
@@ -731,7 +862,7 @@ export default function HomeClient({
       if (!selectedAlleyId && activeCity && s.citySlug !== activeCity.slug) return false;
       return true;
     });
-  }, [shardVersion, lockedCountry, pins, alleyById, selectedAlleyId, activeCity]);
+  }, [shardVersion, lockedCountry, pinsByCountry, alleyById, selectedAlleyId, activeCity]);
 
   // Auto-disable viewport filter when zooming back out below street level (< 10.5)
   useEffect(() => {
@@ -865,8 +996,9 @@ export default function HomeClient({
   }, [showSavedOnly, savedIds, bootstrap.events]);
 
   // Unified Map-Jump Search Autocomplete (Countries + Cities + Alleys + Shops + Platforms)
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const searchResults = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = deferredSearchQuery.trim().toLowerCase();
     if (!q) return null;
 
     const countries = bootstrap.countries
@@ -918,7 +1050,7 @@ export default function HomeClient({
     }
 
     return { countries, cities, alleys, platforms, shops };
-  }, [searchQuery, bootstrap.countries, bootstrap.cities, bootstrap.alleys, bootstrap.platforms, pins, uiLanguage]);
+  }, [deferredSearchQuery, bootstrap.countries, bootstrap.cities, bootstrap.alleys, bootstrap.platforms, pins, uiLanguage]);
 
   // Exactly 2 core tabs: Vintage Shops (Black) | Festival & Markets (Emerald Green #10B981)
   const filterTabs = useMemo<SlidingTabItem[]>(
@@ -977,7 +1109,7 @@ export default function HomeClient({
         lockedCitySlug={activeCity?.slug || null}
         selectedAlleyId={selectedAlleyId}
         selectedSpotId={selectedSpotId}
-        hoveredSpotId={hoveredSpotId}
+        hoverStore={hoverStore}
         drawerOpen={drawerOpen}
         cameraCommand={cameraCommand}
         onClickCountry={handleClickCountry}
@@ -989,9 +1121,9 @@ export default function HomeClient({
         onSelectAlley={handleSelectAlleyById}
         onSelectSpot={handleSelectSpot}
         onSelectEvent={handleSelectEvent}
-        onHoverSpot={setHoveredSpotId}
-        onZoomChange={setZoom}
-        onCenterChange={setLiveCenter}
+        onHoverSpot={hoverStore.set}
+        onZoomChange={handleZoomChange}
+        onCenterChange={centerStore.set}
         onBoundsChange={setMapBounds}
         onReticleStateChange={(st, vis) => {
           setReticleState(st);
@@ -1064,7 +1196,7 @@ export default function HomeClient({
           <span className={styles.brandWordmark}>ATLAS.</span>
           <span className={styles.brandHairline} aria-hidden="true" />
           <span className={`${styles.telemetryCoords} tabular-nums`} data-testid="telemetry-coords">
-            {lockedCountry} · {formatCoordTelemetry(liveCenter)}
+            <TelemetryCoordsText store={centerStore} cc={lockedCountry} />
           </span>
         </button>
 
@@ -1386,8 +1518,8 @@ export default function HomeClient({
                           <div
                             key={ev.id}
                             className={styles.spotCard}
-                            onMouseEnter={() => setHoveredSpotId(ev.id)}
-                            onMouseLeave={() => setHoveredSpotId(null)}
+                            onMouseEnter={() => hoverStore.set(ev.id)}
+                            onMouseLeave={() => hoverStore.set(null)}
                             onClick={() => handleSelectEvent(ev)}
                             role="button"
                             tabIndex={0}
@@ -1419,8 +1551,8 @@ export default function HomeClient({
                           <div
                             key={pin[0]}
                             className={styles.spotCard}
-                            onMouseEnter={() => setHoveredSpotId(pin[0])}
-                            onMouseLeave={() => setHoveredSpotId(null)}
+                            onMouseEnter={() => hoverStore.set(pin[0])}
+                            onMouseLeave={() => hoverStore.set(null)}
                             onClick={() => handleSelectSpot(pin[0], pin[2])}
                             role="button"
                             tabIndex={0}
@@ -1849,8 +1981,8 @@ export default function HomeClient({
                                 isSelected ? styles.eventCardSelected : ""
                               }`}
                               data-testid="mint-event-card"
-                              onMouseEnter={() => setHoveredSpotId(ev.id)}
-                              onMouseLeave={() => setHoveredSpotId(null)}
+                              onMouseEnter={() => hoverStore.set(ev.id)}
+                              onMouseLeave={() => hoverStore.set(null)}
                               onClick={() => handleSelectEvent(ev)}
                               role="button"
                               tabIndex={0}
@@ -1970,72 +2102,25 @@ export default function HomeClient({
                       ) : (
                         <>
                           <div className={styles.spotList}>
-                            {renderedShops.slice(0, visibleCount).map((shop, idx) => {
-                              const isSaved = savedSet.has(shop.id);
-                              const isHovered = hoveredSpotId === shop.id;
-                              const locBadge = shop.alleyName || shop.gu || shop.cityKo;
-                              const stationPart = shop.near?.nameKo || shop.near?.name;
-                              const line2 = [
-                                shop.address || shop.cityKo,
-                                stationPart
-                                  ? `${stationPart}${shop.near?.walkMin ? ` ${copy.walkMin(shop.near.walkMin)}` : ""}`
-                                  : "",
-                              ]
-                                .filter(Boolean)
-                                .join(" · ");
-
-                              return (
-                                <motion.div
-                                  key={shop.id}
-                                  initial={{ opacity: 0, y: 6 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  transition={{
-                                    duration: 0.16,
-                                    delay: Math.min(idx * 0.016, 0.08),
-                                    ease: [0.23, 1, 0.32, 1],
-                                  }}
-                                  className={`${styles.spotCardCompact} ${
-                                    isHovered ? styles.spotCardHovered : ""
-                                  }`}
-                                  data-testid="spot-card"
-                                  onMouseEnter={() => setHoveredSpotId(shop.id)}
-                                  onMouseLeave={() => setHoveredSpotId(null)}
-                                  onClick={() => handleSelectSpot(shop.id, shop.country)}
-                                  role="button"
-                                  tabIndex={0}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") handleSelectSpot(shop.id, shop.country);
-                                  }}
-                                >
-                                  <div className={styles.spotRowMain}>
-                                    <span className={styles.spotNameCompact}>{shop.name}</span>
-                                    <div className={styles.spotRowRight}>
-                                      <span className={styles.locBadge}>{locBadge}</span>
-                                      <button
-                                        type="button"
-                                        className={`${styles.bookmarkBtn} ${
-                                          isSaved ? styles.bookmarkActive : ""
-                                        }`}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          toggleSaveSpot(shop.id);
-                                        }}
-                                        aria-label={copy.savedLabel}
-                                        aria-pressed={isSaved}
-                                      >
-                                        <BookmarkIcon size={15} filled={isSaved} />
-                                      </button>
-                                    </div>
-                                  </div>
-                                  <p className={styles.spotLine2}>{line2}</p>
-                                </motion.div>
-                              );
-                            })}
+                            {renderedShops.slice(0, visibleCount).map((shop, idx) => (
+                              <ShopCard
+                                key={shop.id}
+                                shop={shop}
+                                idx={idx}
+                                isSaved={savedSet.has(shop.id)}
+                                hoverStore={hoverStore}
+                                savedLabel={copy.savedLabel}
+                                walkMin={copy.walkMin}
+                                onSelect={handleSelectSpot}
+                                onToggleSave={toggleSaveSpot}
+                              />
+                            ))}
                           </div>
 
                           {renderedShops.length > visibleCount && (
                             <button
                               type="button"
+                              ref={loadMoreRef}
                               className={styles.loadMoreBtn}
                               onClick={() => setVisibleCount((c) => c + 40)}
                             >

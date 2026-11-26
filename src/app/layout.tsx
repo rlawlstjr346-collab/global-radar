@@ -45,6 +45,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang={locale} dir={getLanguageDir(locale)} suppressHydrationWarning>
+      <head>
+        {/* CARTO Positron style + vector tiles: open the TLS connections while the HTML streams. */}
+        <link rel="preconnect" href="https://basemaps.cartocdn.com" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://tiles.basemaps.cartocdn.com" crossOrigin="anonymous" />
+        {["a", "b", "c", "d"].map((shard) => (
+          <link key={shard} rel="dns-prefetch" href={`https://tiles-${shard}.basemaps.cartocdn.com`} />
+        ))}
+      </head>
       <body>
         {/* Decides the once-per-session orbital intro before first paint (no flash, no hydration mismatch). */}
         <script dangerouslySetInnerHTML={{ __html: INTRO_GATE_SCRIPT }} />

@@ -28,6 +28,9 @@
   justify-content: space-between;
   gap: clamp(12px, 1vw, 20px);
   pointer-events: none;
+  /* Live telemetry text relayouts stay inside the HUD (no paint containment: the search
+     dropdown overflows this box). */
+  contain: layout style;
 }
 
 .brandTelemetry {
@@ -881,6 +884,7 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  contain: layout paint;
 }
 
 .bodyPad {
@@ -1270,6 +1274,9 @@
   cursor: pointer;
   transition: background-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
   border-bottom: 1px solid rgba(17, 17, 17, 0.06);
+  /* Off-screen rows skip layout/paint; `auto` remembers each row's real height once seen. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 76px;
 }
 
 .spotCardCompact:active {

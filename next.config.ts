@@ -17,7 +17,14 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   async headers() {
-    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
+    return [
+      { source: "/:path*", headers: SECURITY_HEADERS },
+      // Static atlas data (bootstrap, pins, shards, countries): edge-cacheable, revalidated in the background.
+      {
+        source: "/data/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" }],
+      },
+    ];
   },
   async redirects() {
     return [

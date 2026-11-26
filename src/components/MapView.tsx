@@ -13,6 +13,7 @@ import type {
 } from "@/lib/atlasTypes";
 import { resolveAlleyDisplay } from "@/lib/alleyZones";
 import type { LanguageCode } from "@/lib/i18n/locales";
+import type { LiveValue } from "@/lib/liveValue";
 import type { ReticleState } from "./CenterReticle";
 import styles from "./MapView.module.css";
 import GlobeCallouts from "./GlobeCallouts";
@@ -50,7 +51,8 @@ interface MapViewProps {
   lockedCitySlug: string | null;
   selectedAlleyId: string | null;
   selectedSpotId: string | null;
-  hoveredSpotId: string | null;
+  /** List <-> pin hover channel; read imperatively so a hover never re-renders the page. */
+  hoverStore: LiveValue<string | null>;
   drawerOpen: boolean;
   cameraCommand: MapCameraCommand | null;
   onClickCountry: (cc: string, alreadyLocked: boolean) => void;
@@ -84,6 +86,8 @@ const SPIN_DEG_PER_SEC = 2.2;
 const SPIN_AIM_FACTOR = 0.15; // cursor on a hub callout only
 const SPIN_IDLE_RESUME_MS = 1200; // after a real input (drag / touch / wheel / dblclick / flight)
 const SPIN_RAMP_MS = 600;
+const HOVER_SPIN_THROTTLE_MS = 100; // country hover hit-test cadence while the globe spins
+const round5 = (v: number) => Math.round(v * 1e5) / 1e5;
 
 /** Distance-proportional flight time: short hops ~1100 ms, cross-world flights cap at 1450 ms. */
 function flightDuration(from: maplibregl.LngLat, to: [number, number], fromZoom: number, toZoom: number): number {
@@ -127,7 +131,7 @@ function createSanctuaryPillImage(): {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
 
   const pad = 2;
@@ -340,7 +344,7 @@ function createDotMatrixTile(ground: string, dot: string, radius: number) {
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
   ctx.fillStyle = ground;
   ctx.fillRect(0, 0, size, size);
@@ -380,7 +384,7 @@ export default function MapView({
   lockedCitySlug,
   selectedAlleyId,
   selectedSpotId,
-  hoveredSpotId,
+  hoverStore,
   drawerOpen,
   cameraCommand,
   onClickCountry,
@@ -420,6 +424,12 @@ export default function MapView({
     () => new Map(countries.map((c) => [c.code, c])),
     [countries],
   );
+  const pinById = useMemo(() => {
+    const map = new Map<string, CompactPinTuple>();
+    for (const p of pins) map.set(p[0], p);
+    return map;
+  }, [pins]);
+  const eventById = useMemo(() => new Map(events.map((ev) => [ev.id, ev])), [events]);
 
   const latestRef = useRef({
     uiLanguage,
@@ -427,6 +437,8 @@ export default function MapView({
     countryByCode,
     cities,
     events,
+    pinById,
+    eventById,
     lockedCountry,
     lockedCitySlug,
     selectedAlleyId,
@@ -453,6 +465,8 @@ export default function MapView({
     countryByCode,
     cities,
     events,
+    pinById,
+    eventById,
     lockedCountry,
     lockedCitySlug,
     selectedAlleyId,
@@ -525,15 +539,9 @@ export default function MapView({
       features: pins.map((p) => ({
         type: "Feature",
         id: p[0],
-        geometry: { type: "Point", coordinates: [p[6], p[7]] },
-        properties: {
-          id: p[0],
-          name: p[1],
-          cc: p[2],
-          citySlug: p[3],
-          alley: p[9],
-          featured: p[10],
-        },
+        geometry: { type: "Point", coordinates: [round5(p[6]), round5(p[7])] },
+        // Worker payload = only what layer styles / hit-tests read; names etc. stay on the main thread.
+        properties: { id: p[0], cc: p[2], featured: p[10] },
       })),
     }),
     [pins],
@@ -562,11 +570,6 @@ export default function MapView({
 
   const eventCitySlugs = useMemo(() => new Set(events.map((ev) => ev.citySlug)), [events]);
 
-  const pinById = useMemo(() => {
-    const map = new Map<string, CompactPinTuple>();
-    for (const p of pins) map.set(p[0], p);
-    return map;
-  }, [pins]);
 
   const syncCountryPaint = (map: maplibregl.Map, locked: string, hovered: string | null) => {
     if (map.getLayer("atlas-countries-fill")) {
@@ -613,6 +616,10 @@ export default function MapView({
         maxPitch: 45,
         attributionControl: { compact: true },
         canvasContextAttributes: { preserveDrawingBuffer: true },
+        // 4K / retina: cap the backing store so fragment cost stays bounded; bigger tile cache
+        // keeps the spinning globe from re-requesting tiles that just rotated out of view.
+        pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
+        maxTileCacheSize: 512,
       });
     } catch {
       setMapError(true);
@@ -633,13 +640,15 @@ export default function MapView({
 
     /** Resume immediately (after a globe reset settles): ramps 0 -> full over SPIN_RAMP_MS.
      *  Deliberately not gated on prefers-reduced-motion (Linux Chromium reports "reduce"). */
-    const startIdleSpin = () => {
-      spinRef.current.lastInput = -Infinity;
+    /** Runs the spin rAF loop; it parks itself (no empty frames) at street zooms or in a
+     *  hidden tab and is restarted by `resumeSpinLoop` once the globe zoom / tab is back. */
+    const ensureSpinLoop = () => {
       if (spinRef.current.raf !== null) return;
       let lastTs = performance.now();
       let lastTelemetry = 0;
       const spin = (ts: number) => {
-        if (!mapRef.current) {
+        if (!mapRef.current || document.hidden || map.getZoom() >= spinMaxZoom) {
+          spinRef.current.factor = 0;
           spinRef.current.raf = null;
           return;
         }
@@ -673,7 +682,20 @@ export default function MapView({
       };
       spinRef.current.raf = requestAnimationFrame(spin);
     };
-    startIdleSpinRef.current = startIdleSpin;
+    const startIdleSpin = () => {
+      spinRef.current.lastInput = -Infinity;
+      ensureSpinLoop();
+    };
+    let spinArmed = false; // set once the style has loaded and the first spin was started
+    const resumeSpinLoop = () => {
+      if (spinArmed && !document.hidden && map.getZoom() < spinMaxZoom) ensureSpinLoop();
+    };
+    const onVisibility = () => resumeSpinLoop();
+    document.addEventListener("visibilitychange", onVisibility);
+    startIdleSpinRef.current = () => {
+      spinArmed = true;
+      startIdleSpin();
+    };
 
     const onPointerDown = (e: PointerEvent) => {
       stopIdleSpin();
@@ -1160,13 +1182,20 @@ export default function MapView({
       }
 
       // List-row hover resonance: the hovered shop / festival pin grows 1.45x with a crisp ring.
+      // A one-feature source carries the hovered pin, so a hover never re-filters 13k features.
+      if (!map.getSource("atlas-hover-point")) {
+        map.addSource("atlas-hover-point", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        });
+      }
       if (!map.getLayer("atlas-hover-ring")) {
-        const none: maplibregl.FilterSpecification = ["==", ["get", "id"], "__NONE__"];
+        const shopOnly: maplibregl.FilterSpecification = ["==", ["get", "kind"], "shop"];
         map.addLayer({
           id: "atlas-hover-ring",
           type: "circle",
-          source: "atlas-street-spots",
-          filter: none,
+          source: "atlas-hover-point",
+          filter: shopOnly,
           paint: {
             "circle-radius": ["interpolate", ["linear"], ["zoom"], 4, 9, 11.4, 10.2, 13.5, 13.1, 16, 16.3],
             "circle-color": "rgba(0, 0, 0, 0)",
@@ -1177,8 +1206,8 @@ export default function MapView({
         map.addLayer({
           id: "atlas-hover-dot",
           type: "circle",
-          source: "atlas-street-spots",
-          filter: none,
+          source: "atlas-hover-point",
+          filter: shopOnly,
           paint: {
             "circle-radius": ["interpolate", ["linear"], ["zoom"], 4, 5.2, 11.4, 5.2, 13.5, 8.1, 16, 11.3],
             "circle-color": "#111111",
@@ -1189,8 +1218,8 @@ export default function MapView({
         map.addLayer({
           id: "atlas-event-hover",
           type: "circle",
-          source: "atlas-live-events",
-          filter: none,
+          source: "atlas-hover-point",
+          filter: ["==", ["get", "kind"], "event"],
           paint: {
             "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 6.4, 10, 8.7, 15, 11],
             "circle-color": "#10B981",
@@ -1200,11 +1229,40 @@ export default function MapView({
         });
       }
 
-      // Mousemove hover highlights on macro globe countries (< 6.2)
+      // Mousemove hover highlights on macro globe countries (< 6.2).
+      // Hit-tests never run while the camera is being moved (drag / zoom / rotate / flight); at
+      // rest they are coalesced to one per frame, and while the auto-spin turns the globe they
+      // are throttled to HOVER_SPIN_THROTTLE_MS so the hover preview keeps working at low cost.
+      let hoverPoint: maplibregl.Point | null = null;
+      let hoverRaf: number | null = null;
+      let lastHoverQuery = 0;
+      const cameraBusy = () =>
+        map.isMoving() ||
+        map.isZooming() ||
+        map.isRotating() ||
+        interactionRef.current !== "idle" ||
+        flightRef.current !== "idle";
+      const hoverFrame = (ts: number) => {
+        hoverRaf = null;
+        if (!mapRef.current || !hoverPoint || cameraBusy()) return;
+        if (spinRef.current.factor > 0 && ts - lastHoverQuery < HOVER_SPIN_THROTTLE_MS) {
+          hoverRaf = requestAnimationFrame(hoverFrame); // keep the latest point, test it shortly
+          return;
+        }
+        lastHoverQuery = ts;
+        const point = hoverPoint;
+        hoverPoint = null;
+        runCountryHover(point);
+      };
       map.on("mousemove", (e: maplibregl.MapMouseEvent) => {
+        if (cameraBusy()) return;
+        hoverPoint = e.point;
+        if (hoverRaf === null) hoverRaf = requestAnimationFrame(hoverFrame);
+      });
+      const runCountryHover = (point: maplibregl.Point) => {
         const z = map.getZoom();
         if (z < 6.2 && map.getLayer("atlas-countries-fill")) {
-          const chits = map.queryRenderedFeatures(e.point, { layers: ["atlas-countries-fill"] });
+          const chits = map.queryRenderedFeatures(point, { layers: ["atlas-countries-fill"] });
           const props = chits[0]?.properties as
             | {
                 ISO_A2?: string;
@@ -1238,9 +1296,10 @@ export default function MapView({
           syncCountryPaint(map, latestRef.current.lockedCountry, null);
           latestRef.current.onHoverCountry(null);
         }
-      });
+      };
 
       map.on("mouseleave", "atlas-countries-fill", () => {
+        hoverPoint = null;
         if (hoveredCountryRef.current !== null) {
           hoveredCountryRef.current = null;
           syncCountryPaint(map, latestRef.current.lockedCountry, null);
@@ -1401,7 +1460,7 @@ export default function MapView({
         });
       }
       emitBounds();
-      startIdleSpin();
+      startIdleSpinRef.current();
     });
 
     let moveRaf: number | null = null;
@@ -1417,7 +1476,9 @@ export default function MapView({
     });
 
     map.on("moveend", (e: maplibregl.MapLibreEvent & { atlasSpin?: boolean }) => {
-      if (!e.atlasSpin) onMoveEnd();
+      if (e.atlasSpin) return;
+      onMoveEnd();
+      resumeSpinLoop();
     });
 
     const zoomBy = (delta: number) => {
@@ -1481,6 +1542,7 @@ export default function MapView({
       if (spinRef.current.raf !== null) cancelAnimationFrame(spinRef.current.raf);
       spinRef.current.raf = null;
       if (moveRaf !== null) cancelAnimationFrame(moveRaf);
+      document.removeEventListener("visibilitychange", onVisibility);
       container.removeEventListener("pointerdown", onPointerDown);
       container.removeEventListener("wheel", onWheel);
       window.removeEventListener("pointermove", onPointerMoveWindow);
@@ -1499,37 +1561,39 @@ export default function MapView({
     syncCountryPaint(map, lockedCountry, hoveredCountryRef.current);
   }, [mapReady, lockedCountry]);
 
-  // 3. Sync Native WebGL GeoJSON Sources
+  // 3. Sync Native WebGL GeoJSON Sources (a source is re-uploaded to the worker only when its
+  //    GeoJSON object actually changed - never twice for the same reference)
+  const sentDataRef = useRef(new Map<string, unknown>());
+  const pushSourceData = (map: maplibregl.Map, id: string, data: GeoJSON.FeatureCollection) => {
+    if (sentDataRef.current.get(id) === data) return;
+    const src = map.getSource(id) as maplibregl.GeoJSONSource | undefined;
+    if (!src) return;
+    src.setData(data);
+    sentDataRef.current.set(id, data);
+  };
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
-    (map.getSource("atlas-city-seeds") as maplibregl.GeoJSONSource | undefined)?.setData(
-      citySeedsGeoJson,
-    );
+    pushSourceData(map, "atlas-city-seeds", citySeedsGeoJson);
   }, [mapReady, citySeedsGeoJson]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
-    (map.getSource("atlas-sanctuaries") as maplibregl.GeoJSONSource | undefined)?.setData(
-      sanctuaryGeoJson,
-    );
+    pushSourceData(map, "atlas-sanctuaries", sanctuaryGeoJson);
   }, [mapReady, sanctuaryGeoJson]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
-    (map.getSource("atlas-street-spots") as maplibregl.GeoJSONSource | undefined)?.setData(
-      streetSpotsGeoJson,
-    );
+    pushSourceData(map, "atlas-street-spots", streetSpotsGeoJson);
   }, [mapReady, streetSpotsGeoJson]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
-    (map.getSource("atlas-live-events") as maplibregl.GeoJSONSource | undefined)?.setData(
-      eventsGeoJson,
-    );
+    pushSourceData(map, "atlas-live-events", eventsGeoJson);
   }, [mapReady, eventsGeoJson]);
 
   // 4c. Selected pin: filter swap instead of rebuilding / re-uploading all 13k features
@@ -1539,15 +1603,61 @@ export default function MapView({
     map.setFilter("atlas-spot-selected", ["==", ["get", "id"], selectedSpotId ?? "__NONE__"]);
   }, [mapReady, selectedSpotId]);
 
-  // 4a. List hover -> map pin resonance (filter swap only; no repaint loop)
+  // 4a. List hover <-> map pin resonance + the single hover / selected capsule tooltip.
+  //     Driven by the hover channel subscription: O(1) one-feature source + one DOM marker,
+  //     no React render anywhere on hover.
+  const syncHoverRef = useRef<() => void>(() => {});
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-    const filter: maplibregl.FilterSpecification = ["==", ["get", "id"], hoveredSpotId ?? "__NONE__"];
-    for (const id of ["atlas-hover-ring", "atlas-hover-dot", "atlas-event-hover"]) {
-      if (map.getLayer(id)) map.setFilter(id, filter);
-    }
-  }, [mapReady, hoveredSpotId]);
+    syncHoverRef.current = () => {
+      const map = mapRef.current;
+      if (!map || !mapReady) return;
+      const hoveredId = hoverStore.get();
+      const { pinById: pins2, eventById: evs } = latestRef.current;
+
+      const hoverPin = hoveredId ? pins2.get(hoveredId) : undefined;
+      const hoverEv = hoveredId && !hoverPin ? evs.get(hoveredId) : undefined;
+      const feature: GeoJSON.Feature<GeoJSON.Point> | null = hoverPin
+        ? { type: "Feature", properties: { kind: "shop" }, geometry: { type: "Point", coordinates: [round5(hoverPin[6]), round5(hoverPin[7])] } }
+        : hoverEv?.center
+          ? { type: "Feature", properties: { kind: "event" }, geometry: { type: "Point", coordinates: hoverEv.center } }
+          : null;
+      (map.getSource("atlas-hover-point") as maplibregl.GeoJSONSource | undefined)?.setData({
+        type: "FeatureCollection",
+        features: feature ? [feature] : [],
+      });
+
+      highlightMarkerRef.current?.remove();
+      highlightMarkerRef.current = null;
+      const selectedId = latestRef.current.selectedSpotId;
+      const targetId = hoveredId || selectedId;
+      if (!targetId) return;
+      const pin = pins2.get(targetId);
+      if (!pin) return;
+
+      const el = document.createElement("button");
+      el.type = "button";
+      el.className = `${styles.spotCapsule} ${selectedId === targetId ? styles.spotCapsuleSelected : ""}`;
+      const label = pin[1].length > 24 ? `${pin[1].slice(0, 23)}…` : pin[1];
+      el.textContent = label;
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        latestRef.current.onSelectSpot(pin[0], pin[2]);
+      });
+
+      highlightMarkerRef.current = new maplibregl.Marker({
+        element: el,
+        anchor: "bottom",
+        offset: [0, -10],
+      })
+        .setLngLat([pin[6], pin[7]])
+        .addTo(map);
+    };
+  });
+
+  useEffect(() => hoverStore.subscribe(() => syncHoverRef.current()), [hoverStore]);
+  useEffect(() => {
+    syncHoverRef.current();
+  }, [mapReady, selectedSpotId, pinById, eventById]);
 
   // 4b. Emerald sonar: CSS keyframe rings on DOM markers -> GPU-composited, zero map repaints
   useEffect(() => {
@@ -1584,39 +1694,6 @@ export default function MapView({
       sonarMarkersRef.current = [];
     };
   }, [mapReady, eventsGeoJson]);
-
-  // 4. Single Hover/Selected Spot Capsule Tooltip
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-    highlightMarkerRef.current?.remove();
-    highlightMarkerRef.current = null;
-
-    const targetId = hoveredSpotId || selectedSpotId;
-    if (!targetId) return;
-    const pin = pinById.get(targetId);
-    if (!pin) return;
-
-    const el = document.createElement("button");
-    el.type = "button";
-    el.className = `${styles.spotCapsule} ${
-      selectedSpotId === targetId ? styles.spotCapsuleSelected : ""
-    }`;
-    const label = pin[1].length > 24 ? `${pin[1].slice(0, 23)}…` : pin[1];
-    el.textContent = label;
-    el.addEventListener("click", (e) => {
-      e.stopPropagation();
-      latestRef.current.onSelectSpot(pin[0], pin[2]);
-    });
-
-    highlightMarkerRef.current = new maplibregl.Marker({
-      element: el,
-      anchor: "bottom",
-      offset: [0, -10],
-    })
-      .setLngLat([pin[6], pin[7]])
-      .addTo(map);
-  }, [mapReady, hoveredSpotId, selectedSpotId, pinById]);
 
   // 5. Cinematic Camera Commands with Architectural Pitch & Quartic Glide
   useEffect(() => {
