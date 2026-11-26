@@ -1,8 +1,5 @@
 import type { NextConfig } from "next";
 
-const LOCALE_PATTERN =
-  "ko|en|ja|zh|fr|de|es|it|nl|pt|th|vi|id|ms|ru|uk|ar|tr|pl|sv|no|da|fi|cs|ro|el|hu|hr|bg|lt|hi|ur|bn|si|he";
-
 // Production security headers. Geolocation stays allowed for our own origin (GPS "locate me").
 const SECURITY_HEADERS = [
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -26,30 +23,9 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  async redirects() {
-    return [
-      {
-        source: "/v2",
-        destination: "/",
-        statusCode: 308,
-      },
-      {
-        source: `/v2/:locale(${LOCALE_PATTERN})`,
-        destination: "/:locale",
-        statusCode: 308,
-      },
-      {
-        source: `/v2/:locale(${LOCALE_PATTERN})/:path*`,
-        destination: "/:locale/explore/:path*",
-        statusCode: 308,
-      },
-      {
-        source: "/v2/:path*",
-        destination: "/ko/explore/:path*",
-        statusCode: 308,
-      },
-    ];
-  },
+  // Legacy URLs (/v2/*, *.html, retired minimap pages, case / trailing-slash variants) are
+  // resolved in src/proxy.ts in a single 308 hop, so Next's own trailing-slash redirect is off.
+  skipTrailingSlashRedirect: true,
 };
 
 export default nextConfig;

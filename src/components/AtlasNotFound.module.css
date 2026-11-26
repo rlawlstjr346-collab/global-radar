@@ -1,0 +1,143 @@
+.root {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: clamp(24px, 4vw, 64px) 16px;
+  background: var(--atlas-bg, #ffffff);
+  color: #111111;
+  font-family: var(--font-sans);
+}
+
+.column {
+  width: min(100%, clamp(320px, 34vw, 640px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: clamp(14px, 1.1vw, 22px);
+  word-break: keep-all;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #111111;
+  text-decoration: none;
+  font-size: clamp(18px, 1.2vw, 26px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.mark {
+  width: clamp(22px, 1.4vw, 30px);
+  height: clamp(22px, 1.4vw, 30px);
+}
+
+.code {
+  margin: clamp(12px, 1.6vw, 32px) 0 0;
+  padding: 4px 10px;
+  border: 1px solid rgba(17, 17, 17, 0.18);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: clamp(11px, 0.68vw, 14px);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #3f3f46;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(26px, 2.1vw, 46px);
+  font-weight: 800;
+  line-height: 1.22;
+  letter-spacing: -0.035em;
+}
+
+.body {
+  margin: 0;
+  font-size: clamp(15px, 0.95vw, 20px);
+  line-height: 1.6;
+  color: #52525b;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: clamp(6px, 0.6vw, 12px);
+}
+
+.primary,
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  height: clamp(46px, 2.8vw, 60px);
+  padding: 0 clamp(20px, 1.4vw, 30px);
+  border-radius: 999px;
+  font-size: clamp(14px, 0.85vw, 18px);
+  font-weight: 700;
+  text-decoration: none;
+  transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1), background-color 160ms ease;
+}
+
+.primary {
+  background: #111111;
+  color: #ffffff;
+}
+
+.primary:hover {
+  background: #27272a;
+}
+
+.secondary {
+  border: 1px solid rgba(17, 17, 17, 0.18);
+  color: #111111;
+  background: #ffffff;
+}
+
+.secondary:hover {
+  background: #f4f4f4;
+}
+
+.primary:active,
+.secondary:active {
+  transform: scale(0.97);
+}
+
+.primary:focus-visible,
+.secondary:focus-visible,
+.brand:focus-visible {
+  outline: 2px solid #111111;
+  outline-offset: 3px;
+}
+
+/* Hairline that fills over the 5 s before the automatic move to the globe */
+.progress {
+  display: block;
+  width: 100%;
+  height: 1px;
+  margin-top: clamp(10px, 1vw, 20px);
+  background: rgba(17, 17, 17, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.progress::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #111111;
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+}
+
+.progress[data-run]::after {
+  transform: scaleX(1);
+  transition: transform 5000ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress[data-run]::after {
+    transition: none;
+  }
+}

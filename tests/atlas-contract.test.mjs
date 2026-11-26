@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { SITE_URL } from "../src/lib/siteUrl.ts";
+import { resolveLegacyPath } from "../src/lib/legacyRoutes.ts";
 import { PLATFORMS } from "../src/data/platforms.ts";
 import { buildAlleyZoneGeoJson, formatCityLocalClock } from "../src/lib/alleyZones.ts";
 import sitemap from "../src/app/sitemap.ts";
@@ -119,10 +120,11 @@ test("2. Zero Unicode emojis, zero Mapbox/API tokens, zero banned copy, zero ban
 test("3. Domain worldvintagemap.com, /v2/* 308 redirects, sitemap, RSS 2.0, and IndexNow verification key", async () => {
   assert.equal(SITE_URL, "https://worldvintagemap.com");
 
-  // Verify /v2/* 308 redirects in next.config.ts
-  const nextCfg = fs.readFileSync(path.join(ROOT, "next.config.ts"), "utf8");
-  assert.ok(nextCfg.includes('source: "/v2"'), "next.config.ts missing /v2 redirect");
-  assert.ok(nextCfg.includes("statusCode: 308"), "next.config.ts must emit 308 Permanent Redirect");
+  // Verify /v2/* legacy URLs 308 to live pages (resolved in src/proxy.ts)
+  const proxySrc = fs.readFileSync(path.join(ROOT, "src", "proxy.ts"), "utf8");
+  assert.ok(proxySrc.includes("resolveLegacyPath"), "proxy.ts must resolve legacy /v2 URLs");
+  assert.ok(proxySrc.includes("status: 308"), "proxy.ts must emit 308 Permanent Redirect");
+  assert.deepEqual(resolveLegacyPath("/v2/ko/south-korea/seoul/", "en"), { redirect: "/ko/explore/kr/seoul" });
 
   // Verify IndexNow 32-char hex key file exists
   const indexNowKey = "a9d9b58ea7453d2f536fdc21f97c77ed";
