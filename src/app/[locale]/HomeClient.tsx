@@ -194,7 +194,7 @@ function countryClickZoom(cc: string): number {
   return 5.4;
 }
 
-interface HomeClientProps {
+export interface HomeClientProps {
   bootstrap: AtlasBootstrap;
   uiLanguage: LanguageCode;
   initialCountry?: string | null;

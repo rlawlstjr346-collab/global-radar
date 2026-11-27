@@ -1,19 +1,17 @@
-import fs from "node:fs";
-import path from "node:path";
 import type { LiveEventsPayload } from "@/lib/atlasTypes";
 import { isActiveEvent } from "@/lib/activeEvents";
+import { readPublicJson } from "@/lib/publicFile";
 
 let cachedPayload: LiveEventsPayload | null = null;
 
-function loadLiveEvents(): LiveEventsPayload {
+async function loadLiveEvents(): Promise<LiveEventsPayload> {
   if (cachedPayload) return cachedPayload;
-  const livePath = path.join(process.cwd(), "public", "data", "live-events.json");
-  if (fs.existsSync(livePath)) {
-    cachedPayload = JSON.parse(fs.readFileSync(livePath, "utf8")) as LiveEventsPayload;
+  const live = await readPublicJson<LiveEventsPayload>("data/live-events.json");
+  if (live) {
+    cachedPayload = live;
     return cachedPayload;
   }
-  const bootPath = path.join(process.cwd(), "public", "data", "atlas-bootstrap.json");
-  const boot = JSON.parse(fs.readFileSync(bootPath, "utf8")) as { events?: LiveEventsPayload["events"] };
+  const boot = (await readPublicJson<{ events?: LiveEventsPayload["events"] }>("data/atlas-bootstrap.json")) ?? {};
   const events = (boot.events || []).map((e) => ({ ...e, source: "curated" as const }));
   return {
     generatedAt: new Date().toISOString(),
@@ -25,7 +23,7 @@ function loadLiveEvents(): LiveEventsPayload {
 }
 
 export async function GET() {
-  const cached = loadLiveEvents();
+  const cached = await loadLiveEvents();
   // Filter at response time: the cached file outlives a one-off event's last day.
   const events = cached.events.filter((ev) => isActiveEvent(ev));
   const payload = { ...cached, events, totalCount: events.length };

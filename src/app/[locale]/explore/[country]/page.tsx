@@ -1,20 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { readAtlasBootstrapSync } from "@/lib/atlasData";
+import { readAtlasBootstrap } from "@/lib/atlasData";
 import { DEFAULT_LANGUAGE, isSupportedLanguage, SUPPORTED_LANGUAGES } from "@/lib/i18n/locales";
+import { localeOgImage } from "@/lib/ogImages";
 import { SITE_URL, RSS_ALTERNATE_TYPES } from "@/lib/siteUrl";
-import HomeClient from "../../HomeClient";
-
-export const instant = false;
+import AtlasClient from "../../AtlasClient";
 
 interface ExploreCountryPageProps {
   params: Promise<{ locale: string; country: string }>;
 }
 
-function resolveCountry(locale: string, countrySlug: string) {
+async function resolveCountry(locale: string, countrySlug: string) {
   if (!isSupportedLanguage(locale)) return null;
-  const bootstrap = readAtlasBootstrapSync();
+  const bootstrap = await readAtlasBootstrap();
   const code = countrySlug.toUpperCase();
   const country = bootstrap.countries.find((c) => c.code === code);
   if (!country) return null;
@@ -23,7 +22,7 @@ function resolveCountry(locale: string, countrySlug: string) {
 
 export async function generateMetadata({ params }: ExploreCountryPageProps): Promise<Metadata> {
   const { locale, country } = await params;
-  const resolved = resolveCountry(locale, country);
+  const resolved = await resolveCountry(locale, country);
   if (!resolved) return {};
 
   const { country: c, bootstrap } = resolved;
@@ -69,13 +68,14 @@ export async function generateMetadata({ params }: ExploreCountryPageProps): Pro
       siteName: "World Vintage Atlas",
       locale: resolved.locale,
       url: `/${resolved.locale}/explore/${slug}`,
+      images: [localeOgImage(resolved.locale)],
     },
   };
 }
 
 export default async function ExploreCountryPage({ params }: ExploreCountryPageProps) {
   const { locale, country } = await params;
-  const resolved = resolveCountry(locale, country);
+  const resolved = await resolveCountry(locale, country);
   if (!resolved) notFound();
 
   const { country: c, bootstrap } = resolved;
@@ -113,8 +113,7 @@ export default async function ExploreCountryPage({ params }: ExploreCountryPageP
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <HomeClient
-        bootstrap={bootstrap}
+      <AtlasClient
         uiLanguage={resolved.locale}
         initialCountry={c.code}
       />

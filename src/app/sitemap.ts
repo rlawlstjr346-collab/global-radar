@@ -1,12 +1,12 @@
 import type { MetadataRoute } from "next";
-import { readAtlasBootstrapSync } from "@/lib/atlasData";
+import { readAtlasBootstrap } from "@/lib/atlasData";
 import { SUPPORTED_LANGUAGES } from "@/lib/i18n/locales";
 import { SITE_URL as BASE_URL } from "@/lib/siteUrl";
 
 const PRIMARY_SEO_LOCALES = ["ko", "en", "ja"] as const;
 
-export default function sitemap(): MetadataRoute.Sitemap {
-  const bootstrap = readAtlasBootstrapSync();
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const bootstrap = await readAtlasBootstrap();
   const lastModified = new Date(bootstrap.meta.generatedAt || Date.now());
 
   const homePages: MetadataRoute.Sitemap = SUPPORTED_LANGUAGES.map((locale) => ({

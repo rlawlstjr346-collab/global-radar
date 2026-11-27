@@ -1,4 +1,4 @@
-import { readAtlasBootstrapSync } from "@/lib/atlasData";
+import { readAtlasBootstrap } from "@/lib/atlasData";
 import { SITE_URL } from "@/lib/siteUrl";
 
 function escapeXml(input: string): string {
@@ -11,7 +11,7 @@ function escapeXml(input: string): string {
 }
 
 export async function GET() {
-  const bootstrap = readAtlasBootstrapSync();
+  const bootstrap = await readAtlasBootstrap();
   const pubDate = new Date(bootstrap.meta.generatedAt || Date.now()).toUTCString();
 
   const cityItems = bootstrap.featuredCities.map((city) => {

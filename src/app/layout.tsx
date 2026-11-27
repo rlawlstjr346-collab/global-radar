@@ -4,6 +4,7 @@ import ConsentManager from "@/components/ConsentManager";
 import { isEuCountry } from "@/lib/i18n/euCountries";
 import { getGeoCountry } from "@/lib/i18n/geo";
 import { DEFAULT_LANGUAGE, getLanguageDir, isSupportedLanguage } from "@/lib/i18n/locales";
+import { ROOT_OG_IMAGE, SITE_ICONS } from "@/lib/ogImages";
 import { SITE_URL } from "@/lib/siteUrl";
 import "./globals.css";
 
@@ -19,6 +20,9 @@ const naverVerification =
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
+  icons: SITE_ICONS,
+  openGraph: { images: [ROOT_OG_IMAGE] },
+  twitter: { images: [ROOT_OG_IMAGE] },
   alternates: {
     types: {
       "application/rss+xml": `${SITE_URL}/rss.xml`,
@@ -31,8 +35,6 @@ export const metadata: Metadata = {
     },
   },
 };
-
-export const instant = false;
 
 /** Global landing (/ko, /en ...) only, once per tab session (not gated on reduced-motion: Linux reports "reduce"). */
 const INTRO_GATE_SCRIPT = `(function(){try{if(!/^\\/[a-z]{2}\\/?$/.test(location.pathname))return;if(sessionStorage.getItem("atlas-intro"))return;sessionStorage.setItem("atlas-intro","1");document.documentElement.setAttribute("data-intro","");}catch(e){}})();`;

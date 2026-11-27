@@ -1,20 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { readAtlasBootstrapSync, readCountryShardSync } from "@/lib/atlasData";
+import { readAtlasBootstrap, readCountryShard } from "@/lib/atlasData";
 import { DEFAULT_LANGUAGE, isSupportedLanguage, SUPPORTED_LANGUAGES } from "@/lib/i18n/locales";
+import { localeOgImage } from "@/lib/ogImages";
 import { SITE_URL, RSS_ALTERNATE_TYPES } from "@/lib/siteUrl";
-import HomeClient from "../../../HomeClient";
-
-export const instant = false;
+import AtlasClient from "../../../AtlasClient";
 
 interface ExploreCityPageProps {
   params: Promise<{ locale: string; country: string; city: string }>;
 }
 
-function resolveCity(locale: string, countrySlug: string, citySlug: string) {
+async function resolveCity(locale: string, countrySlug: string, citySlug: string) {
   if (!isSupportedLanguage(locale)) return null;
-  const bootstrap = readAtlasBootstrapSync();
+  const bootstrap = await readAtlasBootstrap();
   const fullSlug = `${countrySlug.toLowerCase()}/${citySlug.toLowerCase()}`;
   const city = bootstrap.cities.find((c) => c.slug === fullSlug);
   if (!city) return null;
@@ -25,7 +24,7 @@ function resolveCity(locale: string, countrySlug: string, citySlug: string) {
 
 export async function generateMetadata({ params }: ExploreCityPageProps): Promise<Metadata> {
   const { locale, country, city } = await params;
-  const resolved = resolveCity(locale, country, city);
+  const resolved = await resolveCity(locale, country, city);
   if (!resolved) return {};
 
   const { city: cityObj, country: countryObj, bootstrap } = resolved;
@@ -69,17 +68,18 @@ export async function generateMetadata({ params }: ExploreCityPageProps): Promis
       siteName: "World Vintage Atlas",
       locale: resolved.locale,
       url: `/${resolved.locale}/explore/${cityObj.slug}`,
+      images: [localeOgImage(resolved.locale)],
     },
   };
 }
 
 export default async function ExploreCityPage({ params }: ExploreCityPageProps) {
   const { locale, country, city } = await params;
-  const resolved = resolveCity(locale, country, city);
+  const resolved = await resolveCity(locale, country, city);
   if (!resolved) notFound();
 
   const { city: cityObj, country: countryObj, bootstrap } = resolved;
-  const shard = readCountryShardSync(cityObj.country);
+  const shard = await readCountryShard(cityObj.country);
   const cityShops = (shard?.shops || [])
     .filter((s) => s.citySlug === cityObj.slug)
     .slice(0, 15);
@@ -118,8 +118,7 @@ export default async function ExploreCityPage({ params }: ExploreCityPageProps) 
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <HomeClient
-        bootstrap={bootstrap}
+      <AtlasClient
         uiLanguage={resolved.locale}
         initialCountry={cityObj.country}
         initialCitySlug={cityObj.slug}

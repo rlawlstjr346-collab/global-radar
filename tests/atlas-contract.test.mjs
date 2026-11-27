@@ -133,7 +133,7 @@ test("3. Domain worldvintagemap.com, /v2/* 308 redirects, sitemap, RSS 2.0, and 
   assert.match(keyFile, /^[a-f0-9]{32}$/);
 
   // Verify sitemap output includes canonical worldvintagemap.com explore URLs
-  const entries = sitemap();
+  const entries = await sitemap();
   assert.ok(entries.length > 500, `Sitemap expected > 500 URLs, got ${entries.length}`);
   assert.ok(
     entries.some((e) => e.url === "https://worldvintagemap.com/ko/explore/jp/tokyo"),

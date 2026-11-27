@@ -1,11 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { readAtlasBootstrapSync } from "@/lib/atlasData";
+import { readAtlasBootstrap } from "@/lib/atlasData";
 import { isSupportedLanguage } from "@/lib/i18n/locales";
 import { SITE_URL } from "@/lib/siteUrl";
-import HomeClient from "./HomeClient";
-
-export const instant = false;
+import AtlasClient from "./AtlasClient";
 
 interface LocalePageProps {
   params: Promise<{ locale: string }>;
@@ -15,7 +13,7 @@ export default async function LocalePage({ params }: LocalePageProps) {
   const { locale } = await params;
   if (!isSupportedLanguage(locale)) notFound();
 
-  const bootstrap = readAtlasBootstrapSync();
+  const bootstrap = await readAtlasBootstrap();
 
   const ko = locale === "ko";
   const hubs = [...bootstrap.cities]
@@ -64,7 +62,7 @@ export default async function LocalePage({ params }: LocalePageProps) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <HomeClient bootstrap={bootstrap} uiLanguage={locale} />
+      <AtlasClient uiLanguage={locale} />
       {/* 0px visual footprint internal crawl hub for Programmatic SEO */}
       <nav className="sr-only" aria-label="Global Vintage Atlas Directory">
         <ul>

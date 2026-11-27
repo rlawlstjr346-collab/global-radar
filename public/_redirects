@@ -1,0 +1,5 @@
+# Former next/og routes -> pre-rendered PNGs (keeps previously shared links working).
+/icon /icon.png 301
+/apple-icon /apple-icon.png 301
+/opengraph-image /opengraph-image.png 301
+/:locale/opengraph-image /og/:locale.png 301

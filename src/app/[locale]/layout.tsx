@@ -3,7 +3,8 @@ import { RSS_ALTERNATE_TYPES } from "@/lib/siteUrl";
 import { notFound } from "next/navigation";
 import { DEFAULT_LANGUAGE, isSupportedLanguage, SUPPORTED_LANGUAGES } from "@/lib/i18n/locales";
 import { getSeoStrings } from "@/lib/i18n/seoStrings";
-import { readAtlasBootstrapSync } from "@/lib/atlasData";
+import { readAtlasBootstrap } from "@/lib/atlasData";
+import { localeOgImage } from "@/lib/ogImages";
 
 /** Phrases people search before they know the brand (non-branded discovery queries). */
 const DISCOVERY_KEYWORDS: Partial<Record<string, string[]>> = {
@@ -48,7 +49,7 @@ export async function generateMetadata({ params }: LocaleLayoutProps): Promise<M
         : `World Vintage Atlas | 137 Countries · 13,054 Vintage Shops & Local Secondhand Apps`;
 
   // Only the markets actually shown (recurring or not yet ended), never the raw dataset count.
-  const marketCount = readAtlasBootstrapSync().events.length;
+  const marketCount = (await readAtlasBootstrap()).events.length;
   const description =
     locale === "ko"
       ? `도쿄 시모키타자와, 서울 성수·광장시장·동묘, 파리 마레지구 등 137개국 오프라인 빈티지샵 13,054곳, 핵심 골목 664곳, 플리마켓 ${marketCount}곳과 메루카리·빈티드 등 로컬 중고앱 136곳을 한 번에 탐색하세요.`
@@ -75,11 +76,13 @@ export async function generateMetadata({ params }: LocaleLayoutProps): Promise<M
       siteName: "World Vintage Atlas",
       locale,
       url: `/${locale}`,
+      images: [localeOgImage(locale)],
     },
     twitter: {
       card: "summary_large_image",
       title: fullTitle,
       description,
+      images: [localeOgImage(locale)],
     },
   };
 }
