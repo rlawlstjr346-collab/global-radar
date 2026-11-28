@@ -8,5 +8,10 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "worldvintagemap.com", "custom_domain": true },
+    { "pattern": "www.worldvintagemap.com", "custom_domain": true }
+  ]
 }
